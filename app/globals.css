@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+@theme {
+  --color-sage-50: #f3f7f4;
+  --color-sage-100: #e4f0e8;
+  --color-sage-200: #c7dfd0;
+  --color-sage-300: #a3c9b1;
+  --color-sage-400: #78ab8c;
+  --color-sage-500: #568f70;
+  --color-sage-600: #417357;
+  --color-sage-700: #345c47;
+  --color-sage-800: #2c4b3c;
+  --color-sage-900: #243f33;
+  --color-ink: #1a2824;
+  --color-cream: #f5f2ec;
+  --color-paper: #fffcf8;
+  --color-gold: #b8956c;
+  --font-sans: "Cairo", "Segoe UI", Tahoma, sans-serif;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    min-height: 100vh;
+    background-color: var(--color-cream);
+    background-image:
+      radial-gradient(ellipse 80% 50% at 100% -10%, rgba(82, 136, 106, 0.16), transparent),
+      radial-gradient(ellipse 50% 40% at 0% 100%, rgba(184, 149, 108, 0.13), transparent);
+    color: var(--color-ink);
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  ::selection {
+    background: #c7dfd0;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .print-sheet {
+    box-shadow: none !important;
+    border-color: #d7e3db !important;
+  }
+
+  .a4-sheet {
+    width: auto !important;
+    height: 277mm !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .a4-sheet:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+}
+
+@page {
+  size: A4;
+  margin: 10mm;
+}
+
+.a4-sheet {
+  width: 190mm;
+  height: 277mm;
+  margin: 0 auto 12px;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: white;
+  padding: 8mm;
+  border: 1px solid #e2e8e4;
+  box-shadow: 0 18px 50px -32px rgba(36, 63, 50, 0.45);
+}
+
+.discharge-print-only {
+  display: none;
+}
+
+@media print {
+  .discharge-print-only {
+    display: block !important;
+  }
+}
