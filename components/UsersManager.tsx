@@ -7,7 +7,7 @@ import { mutate } from "@/lib/api-client";
 import type { ClinicUser } from "@/lib/db";
 import { ROLE_LABELS, ROLE_OPTIONS, type Role } from "@/lib/permissions";
 
-export async function UsersManager({ users }: { users: ClinicUser[] }) {
+export function UsersManager({ users }: { users: ClinicUser[] }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");

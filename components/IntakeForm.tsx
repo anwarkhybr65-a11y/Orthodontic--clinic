@@ -9,7 +9,7 @@ import type { ClinicUser } from "@/lib/db";
 
 type Match = { id: string; name: string; fileNumber: string; phone: string; doctor: string; planReady: boolean };
 
-export async function IntakeForm({
+export function IntakeForm({
   doctors,
   fileNumber,
   date,

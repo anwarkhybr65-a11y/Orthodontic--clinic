@@ -48,7 +48,7 @@ function SignatureView({ title, image, name }: { title: string; image: string; n
   );
 }
 
-export async function PatientDetail({
+export function PatientDetail({
   patient,
   role = "admin",
   doctors = [],
@@ -398,7 +398,7 @@ function Pill({ children }: { children: React.ReactNode }) {
   return <span className="rounded-full bg-sage-100 px-3 py-1 text-xs font-bold text-sage-800">{children}</span>;
 }
 
-async function Visits({ patient, onDone }: { patient: Patient; onDone: () => void }) {
+function Visits({ patient, onDone }: { patient: Patient; onDone: () => void }) {
   const [visitDate, setVisitDate] = useState(todayISO());
   const [visitTime, setVisitTime] = useState("");
   const [procedures, setProcedures] = useState("");

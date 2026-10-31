@@ -13,7 +13,7 @@ import type { PatientInput } from "@/lib/types";
 
 const steps = ["بيانات", "فحص", "أهداف", "خطة", "مخاطر", "توقيع"];
 
-export async function RegisterForm({
+export function RegisterForm({
   defaults,
   doctors = [],
 }: {
