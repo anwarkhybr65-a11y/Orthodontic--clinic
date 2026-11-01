@@ -57,8 +57,8 @@ export default async function HomePage() {
     },
     {
       href: "/patients",
-      title: user.role === "customer_service" ? "الخطط العلاجية" : "قائمة الحالات",
-      text: user.role === "customer_service" ? "الخطط المكتملة تظهر هنا للطباعة." : "بحث بالاسم أو الملف أو الجوال، ثم فتح صفحة المريض.",
+      title: "قائمة الحالات",
+      text: "بحث بالاسم أو الملف أو الجوال، ثم فتح صفحة المريض.",
       icon: Users,
       show: can(user.role, "patients"),
     },
@@ -72,7 +72,7 @@ export default async function HomePage() {
     {
       href: "/appointments",
       title: "سجل المراجعين",
-      text: user.role === "doctor" ? "عرض المواعيد المحجوزة والحضور والغياب. الحجز من الاستقبال." : "حجز المواعيد وتسجيل حضور اليوم.",
+      text: user.role === "reception" || user.role === "admin" ? "حجز المواعيد، ويظهر حضور اليوم تلقائياً عند تسجيل حالة أو متابعة." : "عرض المواعيد المحجوزة والحضور. الحجز من الاستقبال.",
       icon: CalendarClock,
       show: can(user.role, "appointments"),
     },

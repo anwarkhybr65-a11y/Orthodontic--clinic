@@ -56,7 +56,7 @@ export function Shell({
     },
     {
       href: "/patients",
-      label: user.role === "customer_service" ? "الخطط العلاجية" : "قائمة الحالات",
+      label: "قائمة الحالات",
       icon: Users,
       show: can(user.role, "patients"),
       match: (path: string) => path.startsWith("/patients"),

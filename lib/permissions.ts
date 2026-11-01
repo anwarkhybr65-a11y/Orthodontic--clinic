@@ -18,7 +18,7 @@ const grants: Record<Role, Action[]> = {
   doctor: ["patients", "plan", "images", "visits", "records", "appointments", "discharge", "archive"],
   reception: ["intake", "patients", "appointments"],
   nurse: ["patients", "images", "visits", "records", "archive"],
-  customer_service: ["patients"],
+  customer_service: ["patients", "appointments", "archive"],
 };
 
 export type SessionUser = {

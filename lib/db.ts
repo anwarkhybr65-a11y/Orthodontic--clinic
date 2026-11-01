@@ -375,6 +375,8 @@ async function migrate(db: Sql) {
   await ensureColumn(db, "patients", "plan_ready", "INTEGER NOT NULL DEFAULT 1");
   await ensureColumn(db, "patients", "intake_new", "INTEGER NOT NULL DEFAULT 0");
   await ensureColumn(db, "visits", "visit_time", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(db, "visits", "next_visit", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(db, "daily_attendance", "source", "TEXT NOT NULL DEFAULT ''");
   await ensureColumn(db, "clinical_images", "phase", "TEXT NOT NULL DEFAULT 'before'");
   await ensureColumn(db, "clinical_images", "url", "TEXT NOT NULL DEFAULT ''");
   await ensureColumn(db, "clinical_images", "public_id", "TEXT NOT NULL DEFAULT ''");
@@ -473,6 +475,7 @@ function mapVisit(row: Row): Visit {
     appointmentId: str(row, "appointment_id") || null,
     visitDate: str(row, "visit_date"),
     visitTime: str(row, "visit_time"),
+    nextVisit: str(row, "next_visit"),
     procedures: str(row, "procedures"),
     notes: str(row, "notes"),
     automatic: flag(row.auto),
@@ -846,7 +849,7 @@ export async function createPatient(input: PatientInput, actorId = "") {
       actorId,
     );
   await setFacilityName(patient.facilityName);
-  changed();
+  await markTodayAttendance(id, actorId, "new");
   return await getPatient(id);
 }
 
@@ -895,7 +898,7 @@ export async function createIntake(
       doctor.id,
       actorId,
     );
-  changed();
+  await markTodayAttendance(id, actorId, "new");
   return await getPatient(id);
 }
 
@@ -1002,17 +1005,21 @@ export async function addVisit(patientId: string, input: VisitInput) {
   await ensurePatient(patientId);
   const visitDate = clip(input.visitDate ?? "", 20);
   const visitTime = clip(input.visitTime ?? "", 10);
+  const nextVisit = clip(input.nextVisit ?? "", 20);
   const procedures = clip(input.procedures ?? "");
   const notes = clip(input.notes ?? "");
-  if (!visitDate || !visitTime) throw new ClinicError("تاريخ الزيارة ووقتها مطلوبان");
+  if (!visitDate) throw new ClinicError("تاريخ الزيارة مطلوب");
   if (!procedures && !notes) throw new ClinicError("أضف الإجراء أو ملاحظة الزيارة");
   const id = randomUUID();
-  await (await getDb())
+  const now = new Date().toISOString();
+  const db = await getDb();
+  await db
     .prepare(
-      `INSERT INTO visits (id, patient_id, appointment_id, visit_date, visit_time, procedures, notes, auto, created_at)
-       VALUES (?, ?, NULL, ?, ?, ?, ?, 0, ?)`,
+      `INSERT INTO visits (id, patient_id, appointment_id, visit_date, visit_time, next_visit, procedures, notes, auto, created_at)
+       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, 0, ?)`,
     )
-    .run(id, patientId, visitDate, visitTime, procedures, notes, new Date().toISOString());
+    .run(id, patientId, visitDate, visitTime, nextVisit, procedures, notes, now);
+  await clearPatientFollowups(patientId);
   changed();
   return id;
 }
@@ -1023,13 +1030,16 @@ export async function updateVisit(id: string, input: VisitInput) {
   if (flag(row.auto)) throw new ClinicError("زيارة تأكيد الحضور تُعدَّل من الموعد");
   const visitDate = clip(input.visitDate ?? "", 20);
   const visitTime = clip(input.visitTime ?? "", 10);
+  const nextVisit = clip(input.nextVisit ?? "", 20);
   const procedures = clip(input.procedures ?? "");
   const notes = clip(input.notes ?? "");
-  if (!visitDate || !visitTime) throw new ClinicError("تاريخ الزيارة ووقتها مطلوبان");
+  if (!visitDate) throw new ClinicError("تاريخ الزيارة مطلوب");
   if (!procedures && !notes) throw new ClinicError("أضف الإجراء أو ملاحظة الزيارة");
+  const patientRow = one(await (await getDb()).prepare(`SELECT patient_id FROM visits WHERE id = ?`).get(id));
   await (await getDb())
-    .prepare(`UPDATE visits SET visit_date = ?, visit_time = ?, procedures = ?, notes = ? WHERE id = ?`)
-    .run(visitDate, visitTime, procedures, notes, id);
+    .prepare(`UPDATE visits SET visit_date = ?, visit_time = ?, next_visit = ?, procedures = ?, notes = ? WHERE id = ?`)
+    .run(visitDate, visitTime, nextVisit, procedures, notes, id);
+  if (patientRow) await clearPatientFollowups(str(patientRow, "patient_id"));
   changed();
 }
 
@@ -1541,7 +1551,7 @@ export async function attendedTodayIds(date = todayISO()) {
   );
 }
 
-export async function markTodayAttendance(patientId: string, actorId: string) {
+export async function markTodayAttendance(patientId: string, actorId: string, source = "") {
   await ensurePatient(patientId);
   const date = todayISO();
   const existing = one(
@@ -1549,8 +1559,8 @@ export async function markTodayAttendance(patientId: string, actorId: string) {
   );
   if (!existing) {
     await (await getDb())
-      .prepare(`INSERT INTO daily_attendance (id, patient_id, attend_date, created_by, created_at) VALUES (?, ?, ?, ?, ?)`)
-      .run(randomUUID(), patientId, date, actorId, new Date().toISOString());
+      .prepare(`INSERT INTO daily_attendance (id, patient_id, attend_date, created_by, created_at, source) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(randomUUID(), patientId, date, actorId, new Date().toISOString(), clip(source, 40));
   }
   const upcoming = many(
     await (await getDb())
@@ -1592,12 +1602,12 @@ export async function listTodayAttendance(scope?: PatientScope){
   const rows = many(
     await (await getDb())
       .prepare(
-        `SELECT d.id, d.attend_date, p.id AS patient_id, p.name, p.file_number, p.phone, p.doctor,
+        `SELECT d.id, d.attend_date, d.created_at, d.source, p.id AS patient_id, p.name, p.file_number, p.phone, p.doctor,
                 EXISTS(SELECT 1 FROM appointments a WHERE a.patient_id = p.id AND a.appointment_date = d.attend_date) AS booked
          FROM daily_attendance d
          JOIN patients p ON p.id = d.patient_id
          WHERE d.attend_date = ?${scoped.sql}
-         ORDER BY p.name`,
+         ORDER BY d.created_at ASC`,
       )
       .all(date, ...scoped.params),
   );
@@ -1609,8 +1619,16 @@ export async function listTodayAttendance(scope?: PatientScope){
     phone: str(row, "phone"),
     doctor: str(row, "doctor"),
     attendDate: str(row, "attend_date"),
+    recordedAt: str(row, "created_at"),
+    source: str(row, "source"),
     hadAppointment: flag(row.booked),
   }));
+}
+
+async function clearPatientFollowups(patientId: string) {
+  await (await getDb())
+    .prepare(`UPDATE followups SET read_at = ? WHERE patient_id = ? AND read_at IS NULL`)
+    .run(new Date().toISOString(), patientId);
 }
 
 async function resolveDoctorId(patient: Patient) {
@@ -1634,7 +1652,7 @@ export async function createFollowup(patientId: string, actorId: string) {
        VALUES (?, ?, ?, ?, ?, ?, NULL)`,
     )
     .run(id, patient.id, doctorId, "حالة متابعة بانتظارك", actorId, new Date().toISOString());
-  changed();
+  await markTodayAttendance(patient.id, actorId, "followup");
   return id;
 }
 

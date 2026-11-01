@@ -18,6 +18,7 @@ export default async function FollowupsPage() {
     canSend ? listPatients() : Promise.resolve([]),
     canRead ? listFollowups(user.role === "doctor" ? user.id : undefined) : Promise.resolve([]),
   ]);
+  const notices = items.filter((item) => !item.read);
   const patients = patientRows.map((patient) => ({
     id: patient.id,
     name: patient.name,
@@ -31,15 +32,15 @@ export default async function FollowupsPage() {
       <PageHeader
         eyebrow="التنبيهات"
         title="متابعة"
-        description={canSend ? "اختاري اسم المريض ليصل تنبيه إلى الطبيبة." : "تنبيهات أرسلها الاستقبال وتحتاج متابعة."}
+        description={canSend ? "اختاري اسم المريض ليصل تنبيه إلى الطبيبة، ويظهر اسمه في حضور اليوم." : "يختفي التنبيه بعد تسجيل زيارة المريض وتأكيد حضوره."}
       />
       {canSend ? <FollowupPicker patients={patients} /> : null}
       {canRead ? (
-        items.length === 0 ? (
+        notices.length === 0 ? (
           <p className="rounded-[1.5rem] bg-white px-4 py-12 text-center text-sm text-slate-500">لا توجد تنبيهات متابعة.</p>
         ) : (
           <div className="space-y-3">
-            {items.map((item) => (
+            {notices.map((item) => (
               <FollowupNoticeCard key={item.id} item={item} />
             ))}
           </div>

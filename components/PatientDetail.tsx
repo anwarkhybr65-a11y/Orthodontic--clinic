@@ -162,8 +162,8 @@ export function PatientDetail({
               disabled={busy}
               className="mt-2 block rounded-2xl border border-sage-200 bg-white px-3 py-2 text-sm"
             >
-              <option value="active">قيد العلاج</option>
-              <option value="incomplete">غير منتهية</option>
+              <option value="active">بلا خطة</option>
+              <option value="incomplete">قيد العلاج</option>
               <option value="completed">منتهية</option>
               {patient.status === "discharged" ? <option value="discharged">مخالصة</option> : null}
             </select>
@@ -400,7 +400,7 @@ function Pill({ children }: { children: React.ReactNode }) {
 
 function Visits({ patient, onDone }: { patient: Patient; onDone: () => void }) {
   const [visitDate, setVisitDate] = useState(todayISO());
-  const [visitTime, setVisitTime] = useState("");
+  const [nextVisit, setNextVisit] = useState("");
   const [procedures, setProcedures] = useState("");
   const [notes, setNotes] = useState("");
   const [editingId, setEditingId] = useState("");
@@ -409,7 +409,7 @@ function Visits({ patient, onDone }: { patient: Patient; onDone: () => void }) {
 
   function reset() {
     setVisitDate(todayISO());
-    setVisitTime("");
+    setNextVisit("");
     setProcedures("");
     setNotes("");
     setEditingId("");
@@ -420,7 +420,7 @@ function Visits({ patient, onDone }: { patient: Patient; onDone: () => void }) {
     setBusy(true);
     setError("");
     try {
-      const body = { visitDate, visitTime, procedures, notes };
+      const body = { visitDate, nextVisit, procedures, notes };
       if (editingId) await mutate(`/api/visits/${editingId}`, "PATCH", body);
       else await mutate(`/api/patients/${patient.id}/visits`, "POST", body);
       reset();
@@ -449,8 +449,8 @@ function Visits({ patient, onDone }: { patient: Patient; onDone: () => void }) {
         <Field label="تاريخ الزيارة" required>
           <TextInput type="date" dir="ltr" className="text-right" value={visitDate} onChange={(event) => setVisitDate(event.target.value)} required />
         </Field>
-        <Field label="الوقت" required>
-          <TextInput type="time" dir="ltr" className="text-right" value={visitTime} onChange={(event) => setVisitTime(event.target.value)} required />
+        <Field label="الزيارة القادمة">
+          <TextInput type="date" dir="ltr" className="text-right" value={nextVisit} onChange={(event) => setNextVisit(event.target.value)} />
         </Field>
         <Field label="الإجراء / الخدمة المقدمة">
           <TextInput value={procedures} maxLength={500} onChange={(event) => setProcedures(event.target.value)} />
@@ -472,7 +472,7 @@ function Visits({ patient, onDone }: { patient: Patient; onDone: () => void }) {
             <thead className="bg-sage-50 text-xs font-bold text-sage-800">
               <tr>
                 <th className="px-4 py-3">تاريخ الزيارة</th>
-                <th className="px-4 py-3">الوقت</th>
+                <th className="px-4 py-3">الزيارة القادمة</th>
                 <th className="px-4 py-3">الإجراء / الخدمة المقدمة</th>
                 <th className="px-4 py-3">ملاحظات</th>
                 <th className="px-4 py-3">إجراءات</th>
@@ -482,7 +482,7 @@ function Visits({ patient, onDone }: { patient: Patient; onDone: () => void }) {
               {patient.visits.map((visit) => (
                 <tr key={visit.id} className="border-t border-sage-100 align-top">
                   <td className="px-4 py-3 font-extrabold text-sage-900">{formatLong(visit.visitDate)}</td>
-                  <td className="px-4 py-3" dir="ltr">{visit.visitTime || "—"}</td>
+                  <td className="px-4 py-3">{visit.nextVisit ? formatLong(visit.nextVisit) : "—"}</td>
                   <td className="px-4 py-3">
                     {visit.procedures || "—"}
                     {visit.automatic ? <p className="mt-1 text-xs font-bold text-sage-600">من تأكيد الحضور</p> : null}
@@ -497,7 +497,7 @@ function Visits({ patient, onDone }: { patient: Patient; onDone: () => void }) {
                           onClick={() => {
                             setEditingId(visit.id);
                             setVisitDate(visit.visitDate);
-                            setVisitTime(visit.visitTime);
+                            setNextVisit(visit.nextVisit);
                             setProcedures(visit.procedures);
                             setNotes(visit.notes);
                           }}

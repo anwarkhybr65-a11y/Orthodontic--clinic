@@ -37,10 +37,10 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
     return (
       <div className="space-y-5">
         <div className="no-print">
-          <BackLink href="/patients">الخطط العلاجية</BackLink>
+          <BackLink href="/patients">قائمة الحالات</BackLink>
         </div>
         {patient.planReady ? (
-          <PlanDocument patient={patient} />
+          <PlanDocument patient={patient} singlePage />
         ) : (
           <section className="rounded-[1.75rem] border border-white bg-white p-6">
             <h1 className="text-2xl font-extrabold">{patient.name}</h1>

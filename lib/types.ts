@@ -28,6 +28,7 @@ export type Visit = {
   appointmentId: string | null;
   visitDate: string;
   visitTime: string;
+  nextVisit: string;
   procedures: string;
   notes: string;
   automatic: boolean;
@@ -193,7 +194,8 @@ export type AppointmentPatch = {
 
 export type VisitInput = {
   visitDate: string;
-  visitTime: string;
+  visitTime?: string;
+  nextVisit?: string;
   procedures: string;
   notes: string;
 };
@@ -266,6 +268,8 @@ export type AttendanceEntry = {
   phone: string;
   doctor: string;
   attendDate: string;
+  recordedAt: string;
+  source: string;
   hadAppointment: boolean;
 };
 

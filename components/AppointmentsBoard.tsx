@@ -1,18 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarCheck, CalendarPlus, Pencil, Trash2, UserX } from "lucide-react";
+import { CalendarCheck, CalendarPlus, Pencil, Trash2, UserCheck, UserX } from "lucide-react";
 import { Button, Field, TextInput } from "@/components/ui";
 import { mutate } from "@/lib/api-client";
-import { dayLabel, formatDate, matchesPatientQuery, todayISO } from "@/lib/format";
-import type { Appointment, AppointmentStatus, PatientSummary } from "@/lib/types";
+import { dayLabel, formatClock, formatDate, matchesPatientQuery, todayISO } from "@/lib/format";
+import type { Appointment, AppointmentStatus, AttendanceEntry, PatientSummary } from "@/lib/types";
 
-const tabs: Array<{ id: AppointmentStatus; label: string; icon: typeof CalendarCheck }> = [
+type BoardView = AppointmentStatus | "today";
+
+const tabs: Array<{ id: BoardView; label: string; icon: typeof CalendarCheck }> = [
   { id: "attended", label: "تم الحضور", icon: CalendarCheck },
   { id: "absent", label: "لم يحضر", icon: UserX },
   { id: "upcoming", label: "المواعيد المحجوزة", icon: CalendarPlus },
+  { id: "today", label: "حضور اليوم", icon: UserCheck },
 ];
 
 export function AppointmentsBoard({
@@ -20,16 +23,18 @@ export function AppointmentsBoard({
   patients,
   initialPatientId = "",
   attendedToday = [],
+  attendance = [],
   canBook = true,
 }: {
   appointments: Appointment[];
   patients: PatientSummary[];
   initialPatientId?: string;
   attendedToday?: string[];
+  attendance?: AttendanceEntry[];
   canBook?: boolean;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<AppointmentStatus>(initialPatientId ? "upcoming" : "upcoming");
+  const [tab, setTab] = useState<BoardView>("upcoming");
   const [patientQuery, setPatientQuery] = useState("");
   const [patientId, setPatientId] = useState(initialPatientId);
   const [appointmentDate, setAppointmentDate] = useState(todayISO());
@@ -42,6 +47,16 @@ export function AppointmentsBoard({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const present = new Set(attendedToday);
+
+  useEffect(() => {
+    if (window.location.hash === "#attendance") setTab("today");
+  }, []);
+
+  function selectTab(id: BoardView) {
+    setTab(id);
+    const next = id === "today" ? `${window.location.pathname}${window.location.search}#attendance` : `${window.location.pathname}${window.location.search}`;
+    window.history.replaceState(null, "", next);
+  }
 
   const filteredPatients = patients.filter((patient) =>
     patient.id === patientId || matchesPatientQuery(patient.name, patient.fileNumber, patient.phone, patientQuery),
@@ -145,15 +160,15 @@ export function AppointmentsBoard({
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-2 rounded-[1.5rem] bg-white/80 p-2 sm:grid-cols-3">
+      <div className="grid gap-2 rounded-[1.5rem] bg-white/80 p-2 sm:grid-cols-2 xl:grid-cols-4">
         {tabs.map((item) => {
           const Icon = item.icon;
-          const count = appointments.filter((appointment) => appointment.status === item.id).length;
+          const count = item.id === "today" ? attendance.length : appointments.filter((appointment) => appointment.status === item.id).length;
           return (
             <button
               key={item.id}
               type="button"
-              onClick={() => setTab(item.id)}
+              onClick={() => selectTab(item.id)}
               className={`flex items-center justify-center gap-2 rounded-2xl px-3 py-3 text-sm font-extrabold transition ${
                 tab === item.id ? "bg-sage-700 text-white" : "text-sage-800 hover:bg-sage-50"
               }`}
@@ -201,7 +216,44 @@ export function AppointmentsBoard({
 
       {error ? <p className="text-sm font-semibold text-rose-700">{error}</p> : null}
 
-      {items.length === 0 ? (
+      {tab === "today" ? (
+        attendance.length === 0 ? (
+          <p className="rounded-[1.5rem] bg-white px-4 py-12 text-center text-sm text-slate-500">
+            لم يُسجَّل حضور اليوم بعد. يظهر هنا تلقائياً عند تسجيل حالة جديدة أو إرسال متابعة.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-[1.75rem] border border-white bg-white shadow-sm">
+            <table className="w-full min-w-[40rem] text-right text-sm">
+              <thead className="bg-sage-50 text-xs font-bold text-sage-800">
+                <tr>
+                  <th className="px-4 py-3">الاسم</th>
+                  <th className="px-4 py-3">رقم الملف</th>
+                  <th className="px-4 py-3">الجوال</th>
+                  <th className="px-4 py-3">الطبيبة</th>
+                  <th className="px-4 py-3">الوقت</th>
+                  <th className="px-4 py-3">النوع</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attendance.map((item) => (
+                  <tr key={item.id} className="border-t border-sage-100">
+                    <td className="px-4 py-3 font-extrabold">
+                      <Link href={`/patients/${item.patientId}`} className="hover:underline">{item.patientName}</Link>
+                    </td>
+                    <td className="px-4 py-3" dir="ltr">{item.fileNumber}</td>
+                    <td className="px-4 py-3" dir="ltr">{item.phone || "—"}</td>
+                    <td className="px-4 py-3">{item.doctor || "—"}</td>
+                    <td className="px-4 py-3">{formatClock(item.recordedAt)}</td>
+                    <td className="px-4 py-3 font-bold text-sage-800">
+                      {item.source === "new" ? "حالة جديدة" : item.source === "followup" ? "متابعة" : "حضور"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : items.length === 0 ? (
         <p className="rounded-[1.5rem] bg-white px-4 py-12 text-center text-sm text-slate-500">لا توجد مواعيد في هذا السجل.</p>
       ) : (
         <div className="space-y-6">

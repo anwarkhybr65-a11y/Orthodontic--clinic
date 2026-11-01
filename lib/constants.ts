@@ -48,8 +48,8 @@ export const RECORD_TITLES = [
 ] as const;
 
 export const STATUS_META: Record<Status, { label: string; className: string }> = {
-  active: { label: "قيد العلاج", className: "bg-sage-100 text-sage-800" },
-  incomplete: { label: "غير منتهية", className: "bg-amber-100 text-amber-800" },
+  active: { label: "بلا خطة", className: "bg-amber-100 text-amber-800" },
+  incomplete: { label: "قيد العلاج", className: "bg-sage-100 text-sage-800" },
   completed: { label: "منتهية", className: "bg-emerald-100 text-emerald-800" },
   discharged: { label: "مخالصة", className: "bg-rose-100 text-rose-800" },
   other: { label: "عامة", className: "bg-slate-100 text-slate-700" },

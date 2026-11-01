@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     const user = await requireApi("appointments");
-    if (user.role === "doctor") throw new ClinicError("حجز المواعيد يتم من حساب الاستقبال", 403);
+    if (user.role !== "reception" && user.role !== "admin") throw new ClinicError("حجز المواعيد يتم من حساب الاستقبال", 403);
     const body = await readJson<AppointmentInput>(request);
     const patient = await getPatient(body.patientId ?? "");
     if (!patient) throw new ClinicError("ملف المريض غير موجود", 404);

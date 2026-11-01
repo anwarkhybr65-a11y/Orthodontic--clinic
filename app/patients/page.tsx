@@ -32,12 +32,10 @@ export default async function PatientsPage({
     <div className="space-y-8">
       <PageHeader
         eyebrow="سجل الملفات"
-        title={isNew ? "حالات جديدة" : user.role === "customer_service" ? "الخطط العلاجية" : "قائمة الحالات"}
+        title={isNew ? "حالات جديدة" : "قائمة الحالات"}
         description={
           isNew
             ? "ملفات سجّلها الاستقبال ولم تُفتح بعد. فتح الملف يُنهي التنبيه."
-            : user.role === "customer_service"
-            ? "بعد حفظ الطبيبة للخطة تظهر هنا جاهزة للطباعة. قيد العلاج هنا هي نفس حالات غير المنتهية في الأرشيف."
             : "كل الحالات، قيد العلاج، بلا خطة، المنتهية، والمخالصة. قيد العلاج هي نفس حالات غير المنتهية في الأرشيف."
         }
         action={
