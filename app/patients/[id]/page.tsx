@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { BackLink } from "@/components/BackLink";
 import { FollowupSender } from "@/components/FollowupSender";
 import { PatientDetail } from "@/components/PatientDetail";
@@ -17,6 +18,7 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
   const user = await requireUser();
   if (!can(user.role, "patients")) notFound();
   const { id } = await params;
+  const doctorsPromise = user.role === "admin" ? listDoctors() : Promise.resolve([]);
   const patient = await getPatient(id);
   if (!patient) notFound();
   if (user.role !== "customer_service" && user.role !== "reception") {
@@ -27,7 +29,10 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
       throw error;
     }
   }
-  if (user.role === "doctor" || user.role === "admin") await clearIntakeAlert(patient.id);
+  if (user.role === "doctor" || user.role === "admin") {
+    const patientId = patient.id;
+    after(() => clearIntakeAlert(patientId));
+  }
   if (user.role === "customer_service") {
     return (
       <div className="space-y-5">
@@ -70,7 +75,7 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
     );
   }
 
-  return <PatientDetail patient={patient} role={user.role} doctors={user.role === "admin" ? await listDoctors() : []} />;
+  return <PatientDetail patient={patient} role={user.role} doctors={await doctorsPromise} />;
 }
 
 function Item({ label, value }: { label: string; value: string }) {

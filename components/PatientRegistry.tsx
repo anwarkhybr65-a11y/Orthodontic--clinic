@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Search, Users, X } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -38,6 +39,10 @@ export function PatientRegistry({
   showAttendance?: boolean;
   attendedToday?: string[];
 }) {
+  const router = useRouter();
+  function warm(href: string) {
+    router.prefetch(href);
+  }
   const [query, setQuery] = useState("");
   const [chip, setChip] = useState<Chip>(hideChips ? "all" : initialChip);
   const searching = query.trim().length > 0;
@@ -131,7 +136,12 @@ export function PatientRegistry({
                 {visible.map((patient) => (
                   <tr key={patient.id} className="border-t border-sage-100 transition hover:bg-sage-50/70">
                     <td className="px-4 py-3">
-                      <Link href={`/patients/${patient.id}`} className="font-extrabold text-sage-900 hover:underline">
+                      <Link
+                        href={`/patients/${patient.id}`}
+                        className="font-extrabold text-sage-900 hover:underline"
+                        onMouseEnter={() => warm(`/patients/${patient.id}`)}
+                        onTouchStart={() => warm(`/patients/${patient.id}`)}
+                      >
                         {patient.name}
                         {!patient.planReady ? <span className="ms-2 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">بانتظار الخطة</span> : null}
                       </Link>
@@ -182,7 +192,11 @@ export function PatientRegistry({
           <div className="grid gap-3 md:hidden">
             {visible.map((patient) => (
               <article key={patient.id} className="rounded-[1.5rem] border border-white bg-white p-4 shadow-sm">
-                <Link href={`/patients/${patient.id}`}>
+                <Link
+                  href={`/patients/${patient.id}`}
+                  onMouseEnter={() => warm(`/patients/${patient.id}`)}
+                  onTouchStart={() => warm(`/patients/${patient.id}`)}
+                >
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-extrabold text-sage-900">

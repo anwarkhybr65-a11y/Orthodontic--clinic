@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Archive,
@@ -30,6 +30,7 @@ export function Shell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -102,6 +103,24 @@ export function Shell({
       badge: 0,
     },
   ].filter((item) => item.show);
+  const navHrefs = items.map((item) => item.href).join("\n");
+
+  useEffect(() => {
+    const targets = new Set(navHrefs.split("\n").filter(Boolean));
+    targets.add("/");
+    if (can(user.role, "patients")) targets.add("/patients?filter=incomplete");
+    if (user.role === "doctor" || user.role === "admin") {
+      targets.add("/patients?filter=new");
+      targets.add("/patients?filter=pending");
+    }
+    const timer = window.setTimeout(() => {
+      for (const href of targets) {
+        if (href === pathname) continue;
+        router.prefetch(href);
+      }
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [navHrefs, pathname, router, user.role]);
 
   return (
     <div className="flex min-h-screen">
@@ -120,7 +139,7 @@ export function Shell({
         )}
       >
         <div className="flex items-start justify-between gap-3 px-5 pb-4 pt-6">
-          <Link href="/" className="min-w-0 flex-1">
+          <Link href="/" prefetch className="min-w-0 flex-1">
             <span className="flex items-center gap-2">
               <img src="/logo.png?v=3" alt="" className="h-7 w-auto shrink-0 object-contain" />
               <span className="min-w-0">
@@ -141,6 +160,7 @@ export function Shell({
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-bold transition",

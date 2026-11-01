@@ -108,14 +108,14 @@ export default async function HomePage() {
         <p className="mt-3 max-w-2xl text-sm leading-7 text-white/85">
           متابعة الخطة العلاجية، مواعيد المراجعين، وتقارير المخالصة في واجهة عربية واحدة.
         </p>
-        <Link href={cta.href} className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-extrabold text-sage-900">
+        <Link href={cta.href} prefetch className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-extrabold text-sage-900">
           {cta.label}
           <ChevronLeft size={16} />
         </Link>
       </section>
 
       {showPlanAlert ? (
-        <Link href="/patients?filter=pending" className="block rounded-[1.75rem] border border-amber-200 bg-amber-50 px-5 py-4">
+        <Link href="/patients?filter=pending" prefetch className="block rounded-[1.75rem] border border-amber-200 bg-amber-50 px-5 py-4">
           <p className="text-lg font-extrabold text-amber-950">حالات بلا خطة علاج: {counts.pending}</p>
           <p className="mt-1 text-sm leading-6 text-amber-900">هذه الملفات بانتظار إكمال الخطة العلاجية. افتحي القائمة لإتمامها.</p>
         </Link>
@@ -126,7 +126,7 @@ export default async function HomePage() {
           <h2 className="text-lg font-extrabold">متابعة</h2>
           <div className="mt-3 space-y-2">
             {notices.map((item) => (
-              <Link key={item.id} href="/followups" className="block rounded-2xl bg-sage-50 px-4 py-3">
+              <Link key={item.id} href="/followups" prefetch className="block rounded-2xl bg-sage-50 px-4 py-3">
                 <span className="font-extrabold">{item.patientName}</span>
                 <span className="mt-1 block text-sm text-slate-600">{item.message} · {item.fileNumber}</span>
               </Link>
@@ -142,6 +142,7 @@ export default async function HomePage() {
             <Link
               key={card.label}
               href={card.href}
+              prefetch
               className={cn(
                 "group rounded-[1.5rem] border bg-white/90 px-5 py-4 shadow-sm transition hover:-translate-y-0.5",
                 card.alert ? "border-amber-300 ring-2 ring-amber-200" : "border-white",
@@ -170,6 +171,7 @@ export default async function HomePage() {
               <Link
                 key={section.href}
                 href={section.href}
+                prefetch
                 className="group rounded-[1.75rem] border border-white bg-white p-5 shadow-[0_18px_50px_-32px_rgba(36,63,50,0.55)] transition hover:-translate-y-0.5"
               >
                 <span className="grid h-12 w-12 place-items-center rounded-2xl bg-sage-50 text-sage-700 transition group-hover:bg-sage-700 group-hover:text-white">
