@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { LoginForm } from "@/components/LoginForm";
-import { getFacilityName } from "@/lib/db";
+import { getFacilityName } from "@/lib/cached";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "تسجيل الدخول" };

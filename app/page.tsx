@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Archive, Bell, CalendarCheck, CalendarClock, ChevronLeft, ClipboardList, ClipboardPlus, FileOutput, UserPlus, Users } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { getFacilityName, getNavCounts, getStats, countNewIntakes, listFollowups, listTodayAttendance } from "@/lib/db";
+import { getFacilityName, getNavCounts, getStats, countNewIntakes, listFollowups, listTodayAttendance } from "@/lib/cached";
 import { formatLong, todayISO } from "@/lib/format";
 import { requireUser } from "@/lib/guard";
 import { can, scopeFor } from "@/lib/permissions";

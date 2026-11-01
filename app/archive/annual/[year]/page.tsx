@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeft, CalendarDays } from "lucide-react";
 import { BackLink } from "@/components/BackLink";
 import { PageHeader } from "@/components/PageHeader";
-import { listAttendanceVisits } from "@/lib/db";
+import { listAttendanceVisits } from "@/lib/cached";
 import { MONTHS, monthKey, parseYear } from "@/lib/months";
 import { requirePage } from "@/lib/guard";
 import { scopeFor } from "@/lib/permissions";

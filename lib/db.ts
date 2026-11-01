@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { createClient, type Client, type InValue, type Transaction } from "@libsql/client";
-import { invalidateClinicData, remember, scopeFromKey, scopeKey } from "@/lib/clinic-cache";
+import { invalidateClinicData } from "@/lib/clinic-cache";
 import { destroyClinicalImage, uploadClinicalImage } from "@/lib/cloudinary";
 import { CLINICAL_IMAGE_SLOTS, emptyAppliances, emptyRecords } from "@/lib/constants";
 import { normalizeDischargeDetails } from "@/lib/discharge-details";
@@ -588,12 +588,10 @@ const summarySelect = `
   LEFT JOIN discharge_reports d ON d.patient_id = p.id
 `;
 
-async function loadFacilityName() {
+export async function getFacilityName() {
   const row = one(await (await getDb()).prepare(`SELECT value FROM settings WHERE key = 'facility_name'`).get());
   return row ? str(row, "value") : "عيادة تقويم الأسنان";
 }
-
-export const getFacilityName = remember("facility-name", loadFacilityName);
 
 async function setFacilityName(name: string) {
   await (await getDb())
@@ -604,7 +602,8 @@ async function setFacilityName(name: string) {
     .run(clip(name, 200));
 }
 
-async function loadNextFileNumber(year: string) {
+export async function nextFileNumber() {
+  const year = new Date().getFullYear();
   const rows = many(await (await getDb()).prepare(`SELECT file_number FROM patients`).all());
   let max = 0;
   for (const row of rows) {
@@ -612,12 +611,6 @@ async function loadNextFileNumber(year: string) {
     if (match) max = Math.max(max, Number(match[1]));
   }
   return `ORTH-${year}-${String(max + 1).padStart(4, "0")}`;
-}
-
-const cachedNextFileNumber = remember("next-file-number", loadNextFileNumber);
-
-export function nextFileNumber() {
-  return cachedNextFileNumber(String(new Date().getFullYear()));
 }
 
 function scopeSql(alias: string, scope?: PatientScope) {
@@ -631,9 +624,9 @@ function scopeSql(alias: string, scope?: PatientScope) {
   return { sql: "", params: [] as string[] };
 }
 
-async function loadNavCounts(key: string, doctorId: string, today: string) {
-  const scope = scopeFromKey(key);
+export async function getNavCounts(scope?: PatientScope, doctorId?: string) {
   const db = await getDb();
+  const today = todayISO();
   const patients = scopeSql("patients", scope);
   const appointments = scopeSql("p", scope);
   const current = one(await db.prepare(`SELECT COUNT(*) AS c FROM patients WHERE status = 'active'${patients.sql}`).get(...patients.params));
@@ -673,14 +666,7 @@ async function loadNavCounts(key: string, doctorId: string, today: string) {
   };
 }
 
-const cachedNavCounts = remember("nav-counts", loadNavCounts);
-
-export function getNavCounts(scope?: PatientScope, doctorId?: string) {
-  return cachedNavCounts(scopeKey(scope), doctorId ?? "", todayISO());
-}
-
-async function loadStats(key: string, day: string){
-  const scope = scopeFromKey(key);
+export async function getStats(scope?: PatientScope){
   const db = await getDb();
   const patients = scopeSql("patients", scope);
   const appointments = scopeSql("p", scope);
@@ -699,7 +685,7 @@ async function loadStats(key: string, day: string){
   const today = many(
     await db
       .prepare(`${appointmentSelect} WHERE a.appointment_date = ?${appointments.sql} ORDER BY a.appointment_time ASC`)
-      .all(day, ...appointments.params),
+      .all(todayISO(), ...appointments.params),
   ).map(mapAppointment);
   return {
     active: await countStatus("active"),
@@ -714,41 +700,26 @@ async function loadStats(key: string, day: string){
   };
 }
 
-const cachedStats = remember("stats", loadStats);
-
-export function getStats(scope?: PatientScope) {
-  return cachedStats(scopeKey(scope), todayISO());
-}
-
-async function loadNewIntakeCount(key: string) {
-  const scoped = scopeSql("patients", scopeFromKey(key));
+export async function countNewIntakes(scope?: PatientScope) {
+  const scoped = scopeSql("patients", scope);
   return countOf(one(await (await getDb()).prepare(`SELECT COUNT(*) AS c FROM patients WHERE intake_new = 1${scoped.sql}`).get(...scoped.params)));
 }
 
-const cachedNewIntakeCount = remember("new-intake-count", loadNewIntakeCount);
-
-export function countNewIntakes(scope?: PatientScope) {
-  return cachedNewIntakeCount(scopeKey(scope));
-}
-
-async function loadNewIntakes(key: string) {
-  const scoped = scopeSql("p", scopeFromKey(key));
+export async function listNewIntakes(scope?: PatientScope) {
+  const scoped = scopeSql("p", scope);
   return many(await (await getDb()).prepare(`${summarySelect} WHERE p.intake_new = 1${scoped.sql} ORDER BY p.created_at DESC`).all(...scoped.params)).map(mapSummary);
 }
 
-const cachedNewIntakes = remember("new-intakes", loadNewIntakes);
-
-export function listNewIntakes(scope?: PatientScope) {
-  return cachedNewIntakes(scopeKey(scope));
+function changed() {
+  invalidateClinicData();
 }
 
 export async function clearIntakeAlert(id: string) {
   await (await getDb()).prepare(`UPDATE patients SET intake_new = 0 WHERE id = ? AND intake_new = 1`).run(id);
-  invalidateClinicData();
+  changed();
 }
 
-async function loadPatients(status: string, key: string) {
-  const scope = scopeFromKey(key);
+export async function listPatients(status?: Status, scope?: PatientScope) {
   const scoped = scopeSql("p", scope);
   const statusSql = status ? " AND p.status = ?" : "";
   const params = [...(status ? [status] : []), ...scoped.params];
@@ -756,13 +727,7 @@ async function loadPatients(status: string, key: string) {
   return many(await (await getDb()).prepare(sql).all(...params)).map(mapSummary);
 }
 
-const cachedPatients = remember("patient-list", loadPatients);
-
-export function listPatients(status?: Status, scope?: PatientScope) {
-  return cachedPatients(status ?? "", scopeKey(scope));
-}
-
-async function loadPatient(id: string){
+export async function getPatient(id: string){
   const db = await getDb();
   const row = one(await db.prepare(`SELECT * FROM patients WHERE id = ?`).get(id));
   if (!row) return null;
@@ -779,12 +744,6 @@ async function loadPatient(id: string){
   const discharge = one(await db.prepare(`SELECT * FROM discharge_reports WHERE patient_id = ?`).get(id));
   patient.discharge = discharge ? mapDischarge(discharge) : null;
   return patient;
-}
-
-const cachedPatient = remember("patient", loadPatient);
-
-export function getPatient(id: string) {
-  return cachedPatient(id);
 }
 
 async function ensureUniqueFile(fileNumber: string, ignoreId?: string) {
@@ -873,7 +832,7 @@ export async function createPatient(input: PatientInput, actorId = "") {
       actorId,
     );
   await setFacilityName(patient.facilityName);
-  invalidateClinicData();
+  changed();
   return await getPatient(id);
 }
 
@@ -922,7 +881,7 @@ export async function createIntake(
       doctor.id,
       actorId,
     );
-  invalidateClinicData();
+  changed();
   return await getPatient(id);
 }
 
@@ -1016,7 +975,7 @@ export async function updatePatient(id: string, patch: PatientPatch) {
       id,
     );
   if (next.facilityName !== current.facilityName) await setFacilityName(next.facilityName);
-  invalidateClinicData();
+  changed();
   return await getPatient(id);
 }
 
@@ -1040,7 +999,7 @@ export async function addVisit(patientId: string, input: VisitInput) {
        VALUES (?, ?, NULL, ?, ?, ?, ?, 0, ?)`,
     )
     .run(id, patientId, visitDate, visitTime, procedures, notes, new Date().toISOString());
-  invalidateClinicData();
+  changed();
   return id;
 }
 
@@ -1057,13 +1016,13 @@ export async function updateVisit(id: string, input: VisitInput) {
   await (await getDb())
     .prepare(`UPDATE visits SET visit_date = ?, visit_time = ?, procedures = ?, notes = ? WHERE id = ?`)
     .run(visitDate, visitTime, procedures, notes, id);
-  invalidateClinicData();
+  changed();
 }
 
 export async function deleteVisit(id: string) {
   const result = await (await getDb()).prepare(`DELETE FROM visits WHERE id = ?`).run(id);
   if (!result.changes) throw new ClinicError("الزيارة غير موجودة", 404);
-  invalidateClinicData();
+  changed();
 }
 
 export async function addRecord(patientId: string, input: RecordInput) {
@@ -1079,14 +1038,14 @@ export async function addRecord(patientId: string, input: RecordInput) {
        VALUES (?, ?, ?, ?, ?, ?)`,
     )
     .run(id, patientId, recordDate, title, notes, new Date().toISOString());
-  invalidateClinicData();
+  changed();
   return id;
 }
 
 export async function deleteRecord(id: string) {
   const result = await (await getDb()).prepare(`DELETE FROM medical_records WHERE id = ?`).run(id);
   if (!result.changes) throw new ClinicError("السجل غير موجود", 404);
-  invalidateClinicData();
+  changed();
 }
 
 const IMAGE_TYPES: Record<string, { ext: string; mime: string }> = {
@@ -1159,7 +1118,7 @@ export async function saveClinicalImage(
     throw error;
   }
   if (previous) await removeStoredImage(str(previous, "public_id") || str(previous, "stored_name"));
-  invalidateClinicData();
+  changed();
   return id;
 }
 
@@ -1176,7 +1135,7 @@ export async function deleteClinicalImage(id: string) {
   if (!row) throw new ClinicError("الصورة غير موجودة", 404);
   await (await getDb()).prepare(`DELETE FROM clinical_images WHERE id = ?`).run(id);
   await removeStoredImage(str(row, "public_id") || str(row, "stored_name"));
-  invalidateClinicData();
+  changed();
 }
 
 export async function readClinicalImage(id: string) {
@@ -1191,19 +1150,13 @@ export async function readClinicalImage(id: string) {
   return { mime: str(row, "mime"), url: "", bytes: fs.readFileSync(filePath) };
 }
 
-async function loadAppointments(key: string) {
-  const scoped = scopeSql("p", scopeFromKey(key));
+export async function listAppointments(scope?: PatientScope) {
+  const scoped = scopeSql("p", scope);
   return many(
     await (await getDb())
       .prepare(`${appointmentSelect} WHERE 1=1${scoped.sql} ORDER BY a.appointment_date DESC, a.appointment_time DESC`)
       .all(...scoped.params),
   ).map(mapAppointment);
-}
-
-const cachedAppointments = remember("appointments", loadAppointments);
-
-export function listAppointments(scope?: PatientScope) {
-  return cachedAppointments(scopeKey(scope));
 }
 
 export async function createAppointment(input: AppointmentInput) {
@@ -1221,7 +1174,7 @@ export async function createAppointment(input: AppointmentInput) {
        VALUES (?, ?, ?, ?, ?, 'upcoming', ?)`,
     )
     .run(id, patientId, appointmentDate, appointmentTime, reason, new Date().toISOString());
-  invalidateClinicData();
+  changed();
   return id;
 }
 
@@ -1255,7 +1208,7 @@ export async function setAppointmentStatus(id: string, status: AppointmentStatus
   } else {
     await db.prepare(`DELETE FROM visits WHERE appointment_id = ? AND auto = 1`).run(id);
   }
-  invalidateClinicData();
+  changed();
 }
 
 export async function updateAppointment(id: string, input: AppointmentPatch) {
@@ -1276,7 +1229,7 @@ export async function updateAppointment(id: string, input: AppointmentPatch) {
     `UPDATE visits SET visit_date = ?, visit_time = ?, procedures = ? WHERE appointment_id = ? AND auto = 1`,
   ).run(appointmentDate, appointmentTime, reason || "مراجعة عيادة", id);
   if (input.status) await setAppointmentStatus(id, input.status);
-  invalidateClinicData();
+  changed();
 }
 
 export async function deleteAppointment(id: string) {
@@ -1284,18 +1237,12 @@ export async function deleteAppointment(id: string) {
   await db.prepare(`DELETE FROM visits WHERE appointment_id = ? AND auto = 1`).run(id);
   const result = await db.prepare(`DELETE FROM appointments WHERE id = ?`).run(id);
   if (!result.changes) throw new ClinicError("الموعد غير موجود", 404);
-  invalidateClinicData();
+  changed();
 }
 
-async function loadDischarge(id: string) {
+export async function getDischarge(id: string) {
   const row = one(await (await getDb()).prepare(`SELECT * FROM discharge_reports WHERE id = ?`).get(id));
   return row ? mapDischarge(row) : null;
-}
-
-const cachedDischarge = remember("discharge", loadDischarge);
-
-export function getDischarge(id: string) {
-  return cachedDischarge(id);
 }
 
 export async function createDischarge(input: DischargeInput) {
@@ -1387,13 +1334,13 @@ export async function createDischarge(input: DischargeInput) {
   } catch (error) {
     throw error;
   }
-  invalidateClinicData();
+  changed();
   return await getDischarge(id);
 }
 
-async function loadReportDocs(key: string){
+export async function listReportDocs(scope?: PatientScope){
   const db = await getDb();
-  const scoped = scopeSql("patients", scopeFromKey(key));
+  const scoped = scopeSql("patients", scope);
   const patients = many(
     await db.prepare(`SELECT id, name, file_number, registered_at, status FROM patients WHERE 1=1${scoped.sql}`).all(...scoped.params),
   );
@@ -1434,12 +1381,6 @@ async function loadReportDocs(key: string){
   return docs.sort((a, b) => b.date.localeCompare(a.date) || a.patientName.localeCompare(b.patientName, "ar"));
 }
 
-const cachedReportDocs = remember("report-docs", loadReportDocs);
-
-export function listReportDocs(scope?: PatientScope) {
-  return cachedReportDocs(scopeKey(scope));
-}
-
 export type ClinicUser = {
   id: string;
   username: string;
@@ -1460,25 +1401,17 @@ function mapUser(row: Row): ClinicUser {
   };
 }
 
-async function loadUsers() {
+export async function listUsers() {
   return many(await (await getDb()).prepare(`SELECT * FROM users ORDER BY created_at ASC`).all()).map(mapUser);
 }
-
-export const listUsers = remember("users", loadUsers);
 
 export async function listDoctors() {
   return (await listUsers()).filter((user) => user.role === "doctor" && user.active);
 }
 
-async function loadUser(id: string) {
+export async function getUser(id: string) {
   const row = one(await (await getDb()).prepare(`SELECT * FROM users WHERE id = ?`).get(id));
   return row ? mapUser(row) : null;
-}
-
-const cachedUser = remember("user", loadUser);
-
-export function getUser(id: string) {
-  return cachedUser(id);
 }
 
 export async function authenticate(username: string, password: string) {
@@ -1500,10 +1433,10 @@ export async function createSession(userId: string) {
 
 export async function deleteSession(token: string) {
   await (await getDb()).prepare(`DELETE FROM sessions WHERE id = ?`).run(token);
-  invalidateClinicData();
+  changed();
 }
 
-async function loadUserBySession(token: string) {
+export async function getUserBySession(token: string) {
   const row = one(
     await (await getDb())
       .prepare(
@@ -1513,12 +1446,6 @@ async function loadUserBySession(token: string) {
       .get(token, new Date().toISOString()),
   );
   return row ? mapUser(row) : null;
-}
-
-const cachedUserBySession = remember("session-user", loadUserBySession);
-
-export function getUserBySession(token: string) {
-  return cachedUserBySession(token);
 }
 
 export async function createUser(input: { username: string; password: string; name: string; role: string }) {
@@ -1538,7 +1465,7 @@ export async function createUser(input: { username: string; password: string; na
        VALUES (?, ?, ?, ?, ?, 1, ?)`,
     )
     .run(id, username, hashPassword(password), name, input.role, new Date().toISOString());
-  invalidateClinicData();
+  changed();
   return id;
 }
 
@@ -1552,7 +1479,7 @@ export async function setUserActive(id: string, active: boolean, actorId: string
   }
   await (await getDb()).prepare(`UPDATE users SET active = ? WHERE id = ?`).run(active ? 1 : 0, id);
   if (!active) await (await getDb()).prepare(`DELETE FROM sessions WHERE user_id = ?`).run(id);
-  invalidateClinicData();
+  changed();
 }
 
 export async function setUserPassword(id: string, password: string) {
@@ -1560,7 +1487,7 @@ export async function setUserPassword(id: string, password: string) {
   if (password.length < 6) throw new ClinicError("كلمة المرور لا تقل عن 6 أحرف");
   await (await getDb()).prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).run(hashPassword(password), id);
   await (await getDb()).prepare(`DELETE FROM sessions WHERE user_id = ?`).run(id);
-  invalidateClinicData();
+  changed();
 }
 
 async function patientIdOf(table: string, id: string, missing: string) {
@@ -1585,8 +1512,8 @@ export async function getAppointmentPatientId(id: string) {
   return await patientIdOf("appointments", id, "الموعد غير موجود");
 }
 
-async function loadAppointmentsOn(date: string, key: string) {
-  const scoped = scopeSql("p", scopeFromKey(key));
+export async function listAppointmentsOn(date: string, scope?: PatientScope) {
+  const scoped = scopeSql("p", scope);
   return many(
     await (await getDb())
       .prepare(`${appointmentSelect} WHERE a.appointment_date = ?${scoped.sql} ORDER BY a.appointment_time ASC`)
@@ -1594,22 +1521,10 @@ async function loadAppointmentsOn(date: string, key: string) {
   ).map(mapAppointment);
 }
 
-const cachedAppointmentsOn = remember("appointments-on", loadAppointmentsOn);
-
-export function listAppointmentsOn(date: string, scope?: PatientScope) {
-  return cachedAppointmentsOn(date, scopeKey(scope));
-}
-
-async function loadAttendedIds(date: string) {
+export async function attendedTodayIds(date = todayISO()) {
   return many(await (await getDb()).prepare(`SELECT patient_id FROM daily_attendance WHERE attend_date = ?`).all(date)).map((row) =>
     str(row, "patient_id"),
   );
-}
-
-const cachedAttendedIds = remember("attended-ids", loadAttendedIds);
-
-export function attendedTodayIds(date = todayISO()) {
-  return cachedAttendedIds(date);
 }
 
 export async function markTodayAttendance(patientId: string, actorId: string) {
@@ -1629,12 +1544,12 @@ export async function markTodayAttendance(patientId: string, actorId: string) {
       .all(patientId, date),
   );
   for (const row of upcoming) await setAppointmentStatus(str(row, "id"), "attended");
-  invalidateClinicData();
+  changed();
   return true;
 }
 
-async function loadAttendanceVisits(key: string){
-  const scoped = scopeSql("p", scopeFromKey(key));
+export async function listAttendanceVisits(scope?: PatientScope){
+  const scoped = scopeSql("p", scope);
   const rows = many(
     await (await getDb())
       .prepare(
@@ -1657,14 +1572,9 @@ async function loadAttendanceVisits(key: string){
   }));
 }
 
-const cachedAttendanceVisits = remember("attendance-visits", loadAttendanceVisits);
-
-export function listAttendanceVisits(scope?: PatientScope) {
-  return cachedAttendanceVisits(scopeKey(scope));
-}
-
-async function loadTodayAttendance(key: string, date: string){
-  const scoped = scopeSql("p", scopeFromKey(key));
+export async function listTodayAttendance(scope?: PatientScope){
+  const date = todayISO();
+  const scoped = scopeSql("p", scope);
   const rows = many(
     await (await getDb())
       .prepare(
@@ -1689,12 +1599,6 @@ async function loadTodayAttendance(key: string, date: string){
   }));
 }
 
-const cachedTodayAttendance = remember("today-attendance", loadTodayAttendance);
-
-export function listTodayAttendance(scope?: PatientScope) {
-  return cachedTodayAttendance(scopeKey(scope), todayISO());
-}
-
 async function resolveDoctorId(patient: Patient) {
   if (patient.doctorId) {
     const doctor = await getUser(patient.doctorId);
@@ -1716,11 +1620,11 @@ export async function createFollowup(patientId: string, actorId: string) {
        VALUES (?, ?, ?, ?, ?, ?, NULL)`,
     )
     .run(id, patient.id, doctorId, "حالة متابعة بانتظارك", actorId, new Date().toISOString());
-  invalidateClinicData();
+  changed();
   return id;
 }
 
-async function loadFollowups(doctorId: string){
+export async function listFollowups(doctorId?: string){
   const sql = doctorId
     ? `SELECT f.id, f.patient_id, f.message, f.created_at, f.read_at, p.name, p.file_number, p.doctor
        FROM followups f JOIN patients p ON p.id = f.patient_id
@@ -1741,22 +1645,16 @@ async function loadFollowups(doctorId: string){
   }));
 }
 
-const cachedFollowups = remember("followups", loadFollowups);
-
-export function listFollowups(doctorId?: string) {
-  return cachedFollowups(doctorId ?? "");
-}
-
 export async function markFollowupRead(id: string, doctorId?: string) {
   const sql = doctorId
     ? `UPDATE followups SET read_at = ? WHERE id = ? AND doctor_id = ? AND read_at IS NULL`
     : `UPDATE followups SET read_at = ? WHERE id = ? AND read_at IS NULL`;
   if (doctorId) await (await getDb()).prepare(sql).run(new Date().toISOString(), id, doctorId);
   else await (await getDb()).prepare(sql).run(new Date().toISOString(), id);
-  invalidateClinicData();
+  changed();
 }
 
-async function loadPatientMatch(phone: string, fileNumber: string) {
+export async function findPatientMatch(phone: string, fileNumber: string) {
   const file = clip(fileNumber, 40);
   const mobile = clip(phone, 30);
   if (!file && digitsOf(mobile).length < 8) return null;
@@ -1771,10 +1669,4 @@ async function loadPatientMatch(phone: string, fileNumber: string) {
   );
   if (!row) return null;
   return await getPatient(str(row, "id"));
-}
-
-const cachedPatientMatch = remember("patient-match", loadPatientMatch);
-
-export function findPatientMatch(phone: string, fileNumber: string) {
-  return cachedPatientMatch(phone, fileNumber);
 }

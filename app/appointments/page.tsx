@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { AppointmentsBoard } from "@/components/AppointmentsBoard";
 import { MarkAttendanceForm } from "@/components/MarkAttendanceForm";
 import { PageHeader } from "@/components/PageHeader";
-import { attendedTodayIds, listAppointments, listPatients, listTodayAttendance } from "@/lib/db";
+import { attendedTodayIds, listAppointments, listPatients, listTodayAttendance } from "@/lib/cached";
 import { requireUser } from "@/lib/guard";
 import { can, scopeFor } from "@/lib/permissions";
 

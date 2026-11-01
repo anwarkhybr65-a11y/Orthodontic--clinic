@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { FollowupNoticeCard } from "@/components/FollowupNoticeCard";
 import { FollowupPicker } from "@/components/FollowupPicker";
 import { PageHeader } from "@/components/PageHeader";
-import { listFollowups, listPatients } from "@/lib/db";
+import { listFollowups, listPatients } from "@/lib/cached";
 import { requireUser } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";

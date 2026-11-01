@@ -1,4 +1,4 @@
-import { findPatientMatch } from "@/lib/db";
+import { findPatientMatch } from "@/lib/cached";
 import { requireApi } from "@/lib/guard";
 import { ClinicError } from "@/lib/errors";
 import { fail } from "@/lib/route";

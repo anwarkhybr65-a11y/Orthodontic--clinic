@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CalendarRange, ChevronLeft, CircleCheck, CircleDashed, FileOutput, FolderSearch } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
-import { getStats, listAttendanceVisits, listReportDocs } from "@/lib/db";
+import { getStats, listAttendanceVisits, listReportDocs } from "@/lib/cached";
 import { requirePage } from "@/lib/guard";
 import { scopeFor } from "@/lib/permissions";
 

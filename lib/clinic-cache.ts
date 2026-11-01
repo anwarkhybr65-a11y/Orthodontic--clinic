@@ -26,8 +26,11 @@ export function scopeFromKey(key: string): PatientScope | undefined {
   return undefined;
 }
 
-export function remember<T extends (...args: string[]) => Promise<unknown>>(name: string, fn: T): T {
-  return unstable_cache(fn as (...args: string[]) => Promise<unknown>, [name], clinicCache) as unknown as T;
+export function remember<Args extends string[], Result>(
+  name: string,
+  fn: (...args: Args) => Promise<Result>,
+): (...args: Args) => Promise<Result> {
+  return unstable_cache(fn, [name], clinicCache);
 }
 
 export function invalidateClinicData() {

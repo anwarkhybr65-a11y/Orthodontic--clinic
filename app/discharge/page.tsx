@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { DischargeForm } from "@/components/DischargeForm";
 import { PageHeader } from "@/components/PageHeader";
 import { PrintButton } from "@/components/PrintButton";
-import { listPatients } from "@/lib/db";
+import { listPatients } from "@/lib/cached";
 import { requirePage } from "@/lib/guard";
 import { scopeFor } from "@/lib/permissions";
 

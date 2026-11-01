@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { BackLink } from "@/components/BackLink";
 import { PageHeader } from "@/components/PageHeader";
 import { PatientRegistry } from "@/components/PatientRegistry";
-import { listPatients } from "@/lib/db";
+import { listPatients } from "@/lib/cached";
 import { requirePage } from "@/lib/guard";
 import { scopeFor } from "@/lib/permissions";
 import type { Status } from "@/lib/types";

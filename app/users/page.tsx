@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/PageHeader";
 import { UsersManager } from "@/components/UsersManager";
-import { listUsers } from "@/lib/db";
+import { listUsers } from "@/lib/cached";
 import { requirePage } from "@/lib/guard";
 
 export const dynamic = "force-dynamic";

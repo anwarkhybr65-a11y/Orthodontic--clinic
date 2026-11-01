@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BackLink } from "@/components/BackLink";
 import { PageHeader } from "@/components/PageHeader";
-import { listAttendanceVisits } from "@/lib/db";
+import { listAttendanceVisits } from "@/lib/cached";
 import { formatClock, formatDate } from "@/lib/format";
 import { MONTHS, monthKey, parseMonth, parseYear } from "@/lib/months";
 import { requirePage } from "@/lib/guard";

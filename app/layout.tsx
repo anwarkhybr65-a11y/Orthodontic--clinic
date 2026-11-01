@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Shell } from "@/components/Shell";
 import { getCurrentUser } from "@/lib/auth";
-import { getFacilityName, getNavCounts } from "@/lib/db";
+import { getFacilityName, getNavCounts } from "@/lib/cached";
 import { scopeFor } from "@/lib/permissions";
 import "./globals.css";
 

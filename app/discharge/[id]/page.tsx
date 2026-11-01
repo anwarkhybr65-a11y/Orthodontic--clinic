@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { BackLink } from "@/components/BackLink";
 import { DischargeDocument } from "@/components/DischargeDocument";
-import { getDischarge, getPatient } from "@/lib/db";
+import { getDischarge, getPatient } from "@/lib/cached";
 import { assertPatient, requirePage } from "@/lib/guard";
 import { ClinicError } from "@/lib/errors";
 

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/PageHeader";
-import { listTodayAttendance } from "@/lib/db";
+import { listTodayAttendance } from "@/lib/cached";
 import { requireUser } from "@/lib/guard";
 import { can } from "@/lib/permissions";
 

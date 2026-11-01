@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { PatientRegistry } from "@/components/PatientRegistry";
-import { attendedTodayIds, listNewIntakes, listPatients } from "@/lib/db";
+import { attendedTodayIds, listNewIntakes, listPatients } from "@/lib/cached";
 import { requirePage } from "@/lib/guard";
 import { can, scopeFor } from "@/lib/permissions";
 

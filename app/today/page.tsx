@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
-import { listAppointmentsOn } from "@/lib/db";
+import { listAppointmentsOn } from "@/lib/cached";
 import { dayLabel, formatLong, todayISO } from "@/lib/format";
 import { requireUser } from "@/lib/guard";
 import { scopeFor } from "@/lib/permissions";

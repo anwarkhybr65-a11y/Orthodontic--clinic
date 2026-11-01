@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ChevronLeft, Folder } from "lucide-react";
 import { BackLink } from "@/components/BackLink";
 import { PageHeader } from "@/components/PageHeader";
-import { listAttendanceVisits } from "@/lib/db";
+import { listAttendanceVisits } from "@/lib/cached";
 import { todayISO } from "@/lib/format";
 import { requirePage } from "@/lib/guard";
 import { scopeFor } from "@/lib/permissions";

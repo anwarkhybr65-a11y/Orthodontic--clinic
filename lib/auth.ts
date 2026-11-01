@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { getUserBySession } from "@/lib/db";
+import { getUserBySession } from "@/lib/cached";
 import type { SessionUser } from "@/lib/permissions";
 
 export const SESSION_COOKIE = "clinic_session";

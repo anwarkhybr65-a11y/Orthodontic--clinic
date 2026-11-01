@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { BackLink } from "@/components/BackLink";
 import { PageHeader } from "@/components/PageHeader";
 import { ReportsExplorer } from "@/components/ReportsExplorer";
-import { listReportDocs } from "@/lib/db";
+import { listReportDocs } from "@/lib/cached";
 import { requirePage } from "@/lib/guard";
 import { scopeFor } from "@/lib/permissions";
 
