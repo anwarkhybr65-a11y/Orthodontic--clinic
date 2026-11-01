@@ -44,8 +44,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   const user = await getCurrentUser();
   if (!user) redirect("/api/auth/logout");
-  const facilityName = await getFacilityName();
-  const counts = await getNavCounts(scopeFor(user), user.role === "doctor" ? user.id : undefined);
+  const [facilityName, counts] = await Promise.all([
+    getFacilityName(),
+    getNavCounts(scopeFor(user), user.role === "doctor" ? user.id : undefined),
+  ]);
 
   return (
     <html lang="ar" dir="rtl">

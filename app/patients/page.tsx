@@ -19,9 +19,11 @@ export default async function PatientsPage({
   const user = await requirePage("patients");
   const query = await searchParams;
   const isNew = query.filter === "new" && (user.role === "doctor" || user.role === "admin");
-  const patients = isNew
-    ? await listNewIntakes(user.role === "doctor" ? scopeFor(user) : undefined)
-    : await listPatients(undefined, user.role === "doctor" ? scopeFor(user) : undefined);
+  const scope = user.role === "doctor" ? scopeFor(user) : undefined;
+  const [patients, attendedToday] = await Promise.all([
+    isNew ? listNewIntakes(scope) : listPatients(undefined, scope),
+    attendedTodayIds(),
+  ]);
   const showRegister = can(user.role, "intake") || can(user.role, "fullRegister");
   const requested = query.filter === "pending" || query.section === "unplanned" ? "pending" : query.filter;
   const initialChip = filters.find((item) => item === requested) ?? "all";
@@ -52,7 +54,7 @@ export default async function PatientsPage({
       <PatientRegistry
         patients={patients}
         showAttendance
-        attendedToday={await attendedTodayIds()}
+        attendedToday={attendedToday}
         initialChip={initialChip}
         hideChips={isNew}
         emptyTitle={isNew ? "لا توجد حالات جديدة" : "لا توجد حالات"}

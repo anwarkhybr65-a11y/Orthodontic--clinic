@@ -77,6 +77,13 @@ class Sql {
     return this.client.executeMultiple(sql);
   }
 
+  batchRead(statements: Array<{ sql: string; args?: InValue[] }>) {
+    const stmts = statements.map((item) => ({ sql: item.sql, args: item.args ?? [] }));
+    const runner = this.client as Client;
+    if (!("transaction" in runner)) return (this.client as Transaction).batch(stmts);
+    return runner.batch(stmts, "read");
+  }
+
   async transaction<T>(fn: (db: Sql) => Promise<T>) {
     if (!("transaction" in this.client)) throw new Error("لا يمكن فتح معاملة داخل معاملة");
     const tx = await this.client.transaction("write");
@@ -624,79 +631,85 @@ function scopeSql(alias: string, scope?: PatientScope) {
   return { sql: "", params: [] as string[] };
 }
 
+function counted(rows: Row[]) {
+  return countOf(rows[0]);
+}
+
 export async function getNavCounts(scope?: PatientScope, doctorId?: string) {
   const db = await getDb();
   const today = todayISO();
   const patients = scopeSql("patients", scope);
   const appointments = scopeSql("p", scope);
-  const current = one(await db.prepare(`SELECT COUNT(*) AS c FROM patients WHERE status = 'active'${patients.sql}`).get(...patients.params));
-  const pending = one(await db.prepare(`SELECT COUNT(*) AS c FROM patients WHERE plan_ready = 0 AND status != 'discharged'${patients.sql}`).get(...patients.params));
-  const upcoming = one(
-    await db
-      .prepare(
-        `SELECT COUNT(*) AS c FROM appointments a JOIN patients p ON p.id = a.patient_id WHERE a.status = 'upcoming'${appointments.sql}`,
-      )
-      .get(...appointments.params),
-  );
-  const todayCount = one(
-    await db
-      .prepare(
-        `SELECT COUNT(*) AS c FROM appointments a JOIN patients p ON p.id = a.patient_id WHERE a.appointment_date = ?${appointments.sql}`,
-      )
-      .get(today, ...appointments.params),
-  );
   const attendanceScope = scopeSql("p", scope);
-  const attendance = one(
-    await db
-      .prepare(
-        `SELECT COUNT(*) AS c FROM daily_attendance d JOIN patients p ON p.id = d.patient_id WHERE d.attend_date = ?${attendanceScope.sql}`,
-      )
-      .get(today, ...attendanceScope.params),
-  );
-  const followups = doctorId
-    ? one(await db.prepare(`SELECT COUNT(*) AS c FROM followups WHERE doctor_id = ? AND read_at IS NULL`).get(doctorId))
-    : one(await db.prepare(`SELECT COUNT(*) AS c FROM followups WHERE read_at IS NULL`).get());
+  const [current, pending, upcoming, todayCount, attendance, followups] = await db.batchRead([
+    { sql: `SELECT COUNT(*) AS c FROM patients WHERE status = 'active'${patients.sql}`, args: patients.params },
+    {
+      sql: `SELECT COUNT(*) AS c FROM patients WHERE plan_ready = 0 AND status != 'discharged'${patients.sql}`,
+      args: patients.params,
+    },
+    {
+      sql: `SELECT COUNT(*) AS c FROM appointments a JOIN patients p ON p.id = a.patient_id WHERE a.status = 'upcoming'${appointments.sql}`,
+      args: appointments.params,
+    },
+    {
+      sql: `SELECT COUNT(*) AS c FROM appointments a JOIN patients p ON p.id = a.patient_id WHERE a.appointment_date = ?${appointments.sql}`,
+      args: [today, ...appointments.params],
+    },
+    {
+      sql: `SELECT COUNT(*) AS c FROM daily_attendance d JOIN patients p ON p.id = d.patient_id WHERE d.attend_date = ?${attendanceScope.sql}`,
+      args: [today, ...attendanceScope.params],
+    },
+    doctorId
+      ? { sql: `SELECT COUNT(*) AS c FROM followups WHERE doctor_id = ? AND read_at IS NULL`, args: [doctorId] }
+      : { sql: `SELECT COUNT(*) AS c FROM followups WHERE read_at IS NULL`, args: [] },
+  ]);
   return {
-    current: countOf(current),
-    pending: countOf(pending),
-    upcoming: countOf(upcoming),
-    today: countOf(todayCount),
-    attendance: countOf(attendance),
-    followups: countOf(followups),
+    current: counted(current.rows as Row[]),
+    pending: counted(pending.rows as Row[]),
+    upcoming: counted(upcoming.rows as Row[]),
+    today: counted(todayCount.rows as Row[]),
+    attendance: counted(attendance.rows as Row[]),
+    followups: counted(followups.rows as Row[]),
   };
 }
 
 export async function getStats(scope?: PatientScope){
   const db = await getDb();
+  const today = todayISO();
   const patients = scopeSql("patients", scope);
   const appointments = scopeSql("p", scope);
-  const countStatus = async (status: Status) =>
-    countOf(one(await db.prepare(`SELECT COUNT(*) AS c FROM patients WHERE status = ?${patients.sql}`).get(status, ...patients.params)));
-  const countAppointment = async (status: AppointmentStatus) =>
-    countOf(
-      one(
-        await db
-          .prepare(
-            `SELECT COUNT(*) AS c FROM appointments a JOIN patients p ON p.id = a.patient_id WHERE a.status = ?${appointments.sql}`,
-          )
-          .get(status, ...appointments.params),
-      ),
-    );
-  const today = many(
-    await db
-      .prepare(`${appointmentSelect} WHERE a.appointment_date = ?${appointments.sql} ORDER BY a.appointment_time ASC`)
-      .all(todayISO(), ...appointments.params),
-  ).map(mapAppointment);
+  const statusSql = (status: Status) => ({
+    sql: `SELECT COUNT(*) AS c FROM patients WHERE status = ?${patients.sql}`,
+    args: [status, ...patients.params],
+  });
+  const appointmentSql = (status: AppointmentStatus) => ({
+    sql: `SELECT COUNT(*) AS c FROM appointments a JOIN patients p ON p.id = a.patient_id WHERE a.status = ?${appointments.sql}`,
+    args: [status, ...appointments.params],
+  });
+  const [active, incomplete, completed, discharged, other, upcoming, attended, absent, todayRows] = await db.batchRead([
+    statusSql("active"),
+    statusSql("incomplete"),
+    statusSql("completed"),
+    statusSql("discharged"),
+    statusSql("other"),
+    appointmentSql("upcoming"),
+    appointmentSql("attended"),
+    appointmentSql("absent"),
+    {
+      sql: `${appointmentSelect} WHERE a.appointment_date = ?${appointments.sql} ORDER BY a.appointment_time ASC`,
+      args: [today, ...appointments.params],
+    },
+  ]);
   return {
-    active: await countStatus("active"),
-    incomplete: await countStatus("incomplete"),
-    completed: await countStatus("completed"),
-    discharged: await countStatus("discharged"),
-    other: await countStatus("other"),
-    upcoming: await countAppointment("upcoming"),
-    attended: await countAppointment("attended"),
-    absent: await countAppointment("absent"),
-    today,
+    active: counted(active.rows as Row[]),
+    incomplete: counted(incomplete.rows as Row[]),
+    completed: counted(completed.rows as Row[]),
+    discharged: counted(discharged.rows as Row[]),
+    other: counted(other.rows as Row[]),
+    upcoming: counted(upcoming.rows as Row[]),
+    attended: counted(attended.rows as Row[]),
+    absent: counted(absent.rows as Row[]),
+    today: (todayRows.rows as Row[]).map(mapAppointment),
   };
 }
 
@@ -715,8 +728,8 @@ function changed() {
 }
 
 export async function clearIntakeAlert(id: string) {
-  await (await getDb()).prepare(`UPDATE patients SET intake_new = 0 WHERE id = ? AND intake_new = 1`).run(id);
-  changed();
+  const result = await (await getDb()).prepare(`UPDATE patients SET intake_new = 0 WHERE id = ? AND intake_new = 1`).run(id);
+  if (result.changes) changed();
 }
 
 export async function listPatients(status?: Status, scope?: PatientScope) {
@@ -729,19 +742,20 @@ export async function listPatients(status?: Status, scope?: PatientScope) {
 
 export async function getPatient(id: string){
   const db = await getDb();
-  const row = one(await db.prepare(`SELECT * FROM patients WHERE id = ?`).get(id));
+  const [patients, visits, records, images, discharges] = await db.batchRead([
+    { sql: `SELECT * FROM patients WHERE id = ?`, args: [id] },
+    { sql: `SELECT * FROM visits WHERE patient_id = ? ORDER BY visit_date DESC, visit_time DESC, created_at DESC`, args: [id] },
+    { sql: `SELECT * FROM medical_records WHERE patient_id = ? ORDER BY record_date DESC, created_at DESC`, args: [id] },
+    { sql: `SELECT * FROM clinical_images WHERE patient_id = ? ORDER BY created_at ASC`, args: [id] },
+    { sql: `SELECT * FROM discharge_reports WHERE patient_id = ?`, args: [id] },
+  ]);
+  const row = (patients.rows as Row[])[0];
   if (!row) return null;
   const patient = mapPatient(row);
-  patient.visits = many(
-    await db.prepare(`SELECT * FROM visits WHERE patient_id = ? ORDER BY visit_date DESC, visit_time DESC, created_at DESC`).all(id),
-  ).map(mapVisit);
-  patient.medicalRecords = many(
-    await db.prepare(`SELECT * FROM medical_records WHERE patient_id = ? ORDER BY record_date DESC, created_at DESC`).all(id),
-  ).map(mapRecord);
-  patient.clinicalImages = many(
-    await db.prepare(`SELECT * FROM clinical_images WHERE patient_id = ? ORDER BY created_at ASC`).all(id),
-  ).map(mapClinicalImage);
-  const discharge = one(await db.prepare(`SELECT * FROM discharge_reports WHERE patient_id = ?`).get(id));
+  patient.visits = (visits.rows as Row[]).map(mapVisit);
+  patient.medicalRecords = (records.rows as Row[]).map(mapRecord);
+  patient.clinicalImages = (images.rows as Row[]).map(mapClinicalImage);
+  const discharge = (discharges.rows as Row[])[0];
   patient.discharge = discharge ? mapDischarge(discharge) : null;
   return patient;
 }

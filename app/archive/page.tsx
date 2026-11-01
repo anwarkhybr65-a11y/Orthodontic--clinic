@@ -20,13 +20,13 @@ const cards = [
 export default async function ArchivePage() {
   const user = await requirePage("archive");
   const scope = scopeFor(user);
-  const stats = await getStats(scope);
+  const [stats, reports, visits] = await Promise.all([getStats(scope), listReportDocs(scope), listAttendanceVisits(scope)]);
   const counts = {
     completed: stats.completed,
     incomplete: stats.incomplete,
     discharged: stats.discharged,
-    reports: (await listReportDocs(scope)).length,
-    annual: (await listAttendanceVisits(scope)).length,
+    reports: reports.length,
+    annual: visits.length,
   };
 
   return (

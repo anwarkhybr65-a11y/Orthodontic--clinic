@@ -22,8 +22,14 @@ export default async function AppointmentsPage({
   const manage = can(user.role, "appointments");
   const canBook = user.role !== "doctor";
   const scope = user.role === "doctor" ? scopeFor(user) : undefined;
-  const attendance = await listTodayAttendance();
-  const attendancePatients = (await listPatients()).map((item) => ({ id: item.id, name: item.name, fileNumber: item.fileNumber }));
+  const [attendance, everyone, appointments, scopedPatients, attendedToday] = await Promise.all([
+    listTodayAttendance(),
+    listPatients(),
+    listAppointments(scope),
+    listPatients(undefined, scope),
+    attendedTodayIds(),
+  ]);
+  const attendancePatients = everyone.map((item) => ({ id: item.id, name: item.name, fileNumber: item.fileNumber }));
 
   return (
     <div className="space-y-8">
@@ -39,10 +45,10 @@ export default async function AppointmentsPage({
             }
           />
           <AppointmentsBoard
-            appointments={await listAppointments(scope)}
-            patients={await listPatients(undefined, scope)}
+            appointments={appointments}
+            patients={scopedPatients}
             initialPatientId={patient ?? ""}
-            attendedToday={await attendedTodayIds()}
+            attendedToday={attendedToday}
             canBook={canBook}
           />
         </div>

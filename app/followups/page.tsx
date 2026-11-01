@@ -14,16 +14,17 @@ export default async function FollowupsPage() {
   const canSend = user.role === "reception" || user.role === "admin";
   const canRead = user.role === "doctor" || user.role === "admin";
   if (!canSend && !canRead) notFound();
-  const patients = canSend
-    ? (await listPatients()).map((patient) => ({
-        id: patient.id,
-        name: patient.name,
-        fileNumber: patient.fileNumber,
-        phone: patient.phone,
-        doctor: patient.doctor,
-      }))
-    : [];
-  const items = canRead ? await listFollowups(user.role === "doctor" ? user.id : undefined) : [];
+  const [patientRows, items] = await Promise.all([
+    canSend ? listPatients() : Promise.resolve([]),
+    canRead ? listFollowups(user.role === "doctor" ? user.id : undefined) : Promise.resolve([]),
+  ]);
+  const patients = patientRows.map((patient) => ({
+    id: patient.id,
+    name: patient.name,
+    fileNumber: patient.fileNumber,
+    phone: patient.phone,
+    doctor: patient.doctor,
+  }));
 
   return (
     <div className="space-y-5">

@@ -10,14 +10,21 @@ export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const user = await requireUser();
-  const facilityName = await getFacilityName();
   const today = todayISO();
-  const counts = await getNavCounts(scopeFor(user), user.role === "doctor" ? user.id : undefined);
-  const stats = await getStats(scopeFor(user));
-  const attendanceCount = (await listTodayAttendance()).length;
-  const notices = user.role === "doctor" || user.role === "admin" ? (await listFollowups(user.role === "doctor" ? user.id : undefined)).filter((item) => !item.read).slice(0, 4) : [];
-  const showPlanAlert = (user.role === "doctor" || user.role === "admin") && counts.pending > 0;
-  const newCases = user.role === "doctor" || user.role === "admin" ? await countNewIntakes(scopeFor(user)) : 0;
+  const scope = scopeFor(user);
+  const doctorId = user.role === "doctor" ? user.id : undefined;
+  const seesNotices = user.role === "doctor" || user.role === "admin";
+  const [facilityName, counts, stats, attendance, followupItems, newCases] = await Promise.all([
+    getFacilityName(),
+    getNavCounts(scope, doctorId),
+    getStats(scope),
+    listTodayAttendance(),
+    seesNotices ? listFollowups(doctorId) : Promise.resolve([]),
+    seesNotices ? countNewIntakes(scope) : Promise.resolve(0),
+  ]);
+  const attendanceCount = attendance.length;
+  const notices = followupItems.filter((item) => !item.read).slice(0, 4);
+  const showPlanAlert = seesNotices && counts.pending > 0;
   const cards = [
     {
       href: "/patients?filter=new",
