@@ -1,4 +1,5 @@
 import { PrintButton } from "@/components/PrintButton";
+import { PrintLetterhead } from "@/components/PrintLogo";
 import { APPLIANCE_OPTIONS, GOAL_LABELS, RECORD_OPTIONS, jawLabel } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
 import type { Patient } from "@/lib/types";
@@ -15,13 +16,12 @@ export function PlanDocument({ patient, singlePage = false }: { patient: Patient
           <PrintButton label="طباعة الخطة العلاجية" />
         </div>
         <article className="a4-sheet">
-          <header className="border-b border-slate-300 pb-1">
-            <p className="text-[10px] font-bold text-slate-500">{patient.facilityName}</p>
-            <div className="mt-1 flex items-end justify-between gap-3">
-              <h1 className="text-lg font-extrabold text-slate-900">خطة علاجية</h1>
-              <p className="text-[10px] text-slate-600">رقم الملف {patient.fileNumber} · {formatDate(patient.registeredAt)}</p>
-            </div>
-          </header>
+          <PrintLetterhead
+            compact
+            kicker={patient.facilityName}
+            title="خطة علاجية"
+            meta={`رقم الملف ${patient.fileNumber} · ${formatDate(patient.registeredAt)}`}
+          />
           <div className="mt-2 grid grid-cols-4 gap-2 text-[11px]">
             <Cell label="المريضة" value={patient.name} />
             <Cell label="العمر" value={patient.age} />
@@ -71,13 +71,11 @@ export function PlanDocument({ patient, singlePage = false }: { patient: Patient
         <PrintButton label="طباعة الخطة العلاجية" />
       </div>
       <article className="a4-sheet">
-        <header className="border-b border-slate-300 pb-2">
-          <p className="text-[11px] font-bold text-slate-500">{patient.facilityName}</p>
-          <div className="mt-1 flex items-end justify-between gap-3">
-            <h1 className="text-xl font-extrabold text-slate-900">خطة علاجية</h1>
-            <p className="text-[11px] text-slate-600">رقم الملف {patient.fileNumber} · {formatDate(patient.registeredAt)}</p>
-          </div>
-        </header>
+        <PrintLetterhead
+          kicker={patient.facilityName}
+          title="خطة علاجية"
+          meta={`رقم الملف ${patient.fileNumber} · ${formatDate(patient.registeredAt)}`}
+        />
         <div className="mt-3 grid grid-cols-4 gap-2 text-[12px]">
           <Cell label="المريضة" value={patient.name} />
           <Cell label="العمر" value={patient.age} />
@@ -101,12 +99,11 @@ export function PlanDocument({ patient, singlePage = false }: { patient: Patient
         </div>
       </article>
       <article className="a4-sheet">
-        <header className="border-b border-slate-300 pb-2">
-          <div className="flex items-end justify-between gap-3">
-            <h1 className="text-lg font-extrabold text-slate-900">الخطة العلاجية المقترحة</h1>
-            <p className="text-[11px] text-slate-600">{patient.name} · {patient.fileNumber}</p>
-          </div>
-        </header>
+        <PrintLetterhead
+          kicker={patient.facilityName}
+          title="الخطة العلاجية المقترحة"
+          meta={`${patient.name} · ${patient.fileNumber}`}
+        />
         <div className="mt-3 grid grid-cols-2 gap-2 text-[12px]">
           <Cell label="الأجهزة" value={appliances.length ? appliances.map((item) => item.label).join(" · ") : "—"} />
           <Cell label="الفك" value={jawLabel(patient.jaw)} />

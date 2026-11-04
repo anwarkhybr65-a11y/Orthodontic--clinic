@@ -11,6 +11,7 @@ import {
   labelOf,
   type DischargeDetails,
 } from "@/lib/discharge-details";
+import { PrintLetterhead } from "@/components/PrintLogo";
 import { formatDate } from "@/lib/format";
 
 export type DischargeSheetInput = {
@@ -67,13 +68,11 @@ export function DischargeSheets({ data }: { data: DischargeSheetInput }) {
   return (
     <div>
       <article className="a4-sheet flex flex-col">
-        <header className="border-b border-slate-300 pb-2">
-          <p className="text-[11px] font-bold text-slate-500">{data.facilityName || "مجمع أنوار خيبر الطبي"}</p>
-          <div className="mt-1 flex items-end justify-between gap-3">
-            <h1 className="text-xl font-extrabold text-slate-900">ملخص حالة وتصفية علاج التقويم</h1>
-            <p className="text-[11px] text-slate-600">رقم الملف {data.fileNumber || "—"} · {formatDate(data.reportDate)}</p>
-          </div>
-        </header>
+        <PrintLetterhead
+          kicker={data.facilityName || "مجمع أنوار خيبر الطبي"}
+          title="ملخص حالة وتصفية علاج التقويم"
+          meta={`رقم الملف ${data.fileNumber || "—"} · ${formatDate(data.reportDate)}`}
+        />
         <div className="mt-3 grid grid-cols-4 gap-2">
           <Cell label="اسم المريض" value={data.patientName} />
           <Cell label="رقم الملف" value={data.fileNumber} />
@@ -124,12 +123,11 @@ export function DischargeSheets({ data }: { data: DischargeSheetInput }) {
       </article>
 
       <article className="a4-sheet flex flex-col">
-        <header className="border-b border-slate-300 pb-2">
-          <div className="flex items-end justify-between gap-3">
-            <h1 className="text-lg font-extrabold text-slate-900">ما تم إنجازه وخطة التثبيت</h1>
-            <p className="text-[11px] text-slate-600">{data.patientName || "—"} · {data.fileNumber || "—"}</p>
-          </div>
-        </header>
+        <PrintLetterhead
+          kicker={data.facilityName || "مجمع أنوار خيبر الطبي"}
+          title="ما تم إنجازه وخطة التثبيت"
+          meta={`${data.patientName || "—"} · ${data.fileNumber || "—"}`}
+        />
         <div className="mt-3 grid grid-cols-4 gap-2">
           <Cell label="تاريخ التركيب" value={formatDate(details.bondingDate)} />
           <Cell label="آخر زيارة" value={formatDate(details.lastVisitDate)} />

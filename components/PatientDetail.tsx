@@ -8,6 +8,7 @@ import { BackLink } from "@/components/BackLink";
 import { ClinicalGallery } from "@/components/ClinicalGallery";
 import { ExamFields, GoalsFields, PlanFields, RiskFields, type ClinicalValue } from "@/components/ClinicalFields";
 import { PrintButton } from "@/components/PrintButton";
+import { PrintLogo } from "@/components/PrintLogo";
 import { SignaturePad } from "@/components/SignaturePad";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button, Choice, Field, SectionCard, TextArea, TextInput } from "@/components/ui";
@@ -335,10 +336,13 @@ export function PatientDetail({
             </div>
           ) : (
             <article className="print-sheet space-y-6 rounded-[1.75rem] border border-white bg-white p-5 shadow-sm sm:p-6">
-              <header className="border-b border-sage-100 pb-4">
-                <p className="text-sm font-bold text-sage-700">{patient.facilityName}</p>
-                <h2 className="mt-1 text-xl font-extrabold">خطة علاجية</h2>
-                <p className="mt-1 text-sm text-slate-500">رقم الملف {patient.fileNumber} · {formatDate(patient.registeredAt)}</p>
+              <header className="flex items-center gap-4 border-b border-sage-100 pb-4">
+                <PrintLogo className="h-12" />
+                <div>
+                  <p className="text-sm font-bold text-sage-700">{patient.facilityName}</p>
+                  <h2 className="mt-1 text-xl font-extrabold">خطة علاجية</h2>
+                  <p className="mt-1 text-sm text-slate-500">رقم الملف {patient.fileNumber} · {formatDate(patient.registeredAt)}</p>
+                </div>
               </header>
               <Block title="الشكوى الرئيسية" text={patient.chiefComplaint} />
               <Block title="التشخيص السريري" text={patient.clinicalDiagnosis} />
