@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui";
 import { mutate } from "@/lib/api-client";
 
 export function FollowupSender({ patientId }: { patientId: string }) {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
@@ -16,6 +18,7 @@ export function FollowupSender({ patientId }: { patientId: string }) {
     try {
       await mutate("/api/followups", "POST", { patientId });
       setDone(true);
+      router.refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "تعذر إرسال الإشعار");
     } finally {

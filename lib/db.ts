@@ -878,8 +878,8 @@ export async function createIntake(
         chief_complaint, clinical_diagnosis, records_json, goals_json, appliances_json,
         jaw, estimated_duration, treatment_stages, risks, special_instructions,
         patient_signature, doctor_signature, patient_signed_name, doctor_signed_name,
-        consent, status, created_at, updated_at, doctor_id, created_by, plan_ready
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?, '', '', '', '', '', '', '', '', '', 0, 'active', ?, ?, ?, ?, 0)`,
+        consent, status, created_at, updated_at, doctor_id, created_by, plan_ready, intake_new
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?, '', '', '', '', '', '', '', '', '', 0, 'active', ?, ?, ?, ?, 0, 1)`,
     )
     .run(
       id,
@@ -1554,21 +1554,27 @@ export async function attendedTodayIds(date = todayISO()) {
 export async function markTodayAttendance(patientId: string, actorId: string, source = "") {
   await ensurePatient(patientId);
   const date = todayISO();
+  const recordedAt = new Date().toISOString();
+  const attendanceSource = clip(source, 40);
   const existing = one(
-    await (await getDb()).prepare(`SELECT id FROM daily_attendance WHERE patient_id = ? AND attend_date = ?`).get(patientId, date),
+    await (await getDb()).prepare(`SELECT id, source FROM daily_attendance WHERE patient_id = ? AND attend_date = ?`).get(patientId, date),
   );
   if (!existing) {
     await (await getDb())
       .prepare(`INSERT INTO daily_attendance (id, patient_id, attend_date, created_by, created_at, source) VALUES (?, ?, ?, ?, ?, ?)`)
-      .run(randomUUID(), patientId, date, actorId, new Date().toISOString(), clip(source, 40));
+      .run(randomUUID(), patientId, date, actorId, recordedAt, attendanceSource);
+  } else if (attendanceSource === "followup" && str(existing, "source") !== "followup") {
+    await (await getDb())
+      .prepare(`UPDATE daily_attendance SET source = ?, created_at = ?, created_by = ? WHERE id = ?`)
+      .run(attendanceSource, recordedAt, actorId, str(existing, "id"));
   }
+  changed();
   const upcoming = many(
     await (await getDb())
       .prepare(`SELECT id FROM appointments WHERE patient_id = ? AND appointment_date = ? AND status = 'upcoming'`)
       .all(patientId, date),
   );
   for (const row of upcoming) await setAppointmentStatus(str(row, "id"), "attended");
-  changed();
   return true;
 }
 
