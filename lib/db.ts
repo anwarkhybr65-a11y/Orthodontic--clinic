@@ -1073,8 +1073,7 @@ async function pricedVisit(input: VisitInput) {
   if (brokenBrackets > 0 && !knownId(BREAK_REASONS, breakReason)) throw new ClinicError("حددي سبب كسر البراكت");
   const priceRow = one(await (await getDb()).prepare(`SELECT price FROM procedure_prices WHERE code = ?`).get(priceCode(procedureCode, jaw)));
   const procedureDue = money(amountOf(priceRow?.price));
-  const settlesInFull = paymentMethod !== "installments";
-  const paid = settlesInFull ? null : money(Math.max(0, amountOf(input.paidAmount)));
+  const paid = paymentMethod === "installments" ? undefined : null;
   return {
     visitDate,
     visitTime,
@@ -1120,7 +1119,7 @@ async function rebalancePatient(patientId: string) {
   }
 }
 
-async function settleVisit(id: string, patientId: string, paid: number | null) {
+async function settleVisit(id: string, patientId: string, paid: number | null | undefined) {
   if (paid === null) {
     const row = one(await (await getDb()).prepare(`SELECT due_amount FROM visits WHERE id = ?`).get(id));
     await (await getDb()).prepare(`UPDATE visits SET paid_amount = ? WHERE id = ?`).run(money(amountOf(row?.due_amount)), id);
@@ -1180,7 +1179,7 @@ export async function updateVisit(id: string, input: VisitInput) {
     .prepare(
       `UPDATE visits SET visit_date = ?, visit_time = ?, next_visit = ?, procedures = ?, notes = ?,
         patient_type = ?, payment_method = ?, procedure_code = ?, visit_jaw = ?, broken_brackets = ?,
-        break_reason = ?, procedure_due = ?, paid_amount = ? WHERE id = ?`,
+        break_reason = ?, procedure_due = ? WHERE id = ?`,
     )
     .run(
       visit.visitDate,
@@ -1195,7 +1194,6 @@ export async function updateVisit(id: string, input: VisitInput) {
       visit.brokenBrackets,
       visit.breakReason,
       visit.procedureDue,
-      visit.paid ?? 0,
       id,
     );
   const patientId = str(row, "patient_id");

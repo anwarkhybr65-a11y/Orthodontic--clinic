@@ -419,7 +419,6 @@ function Visits({ patient, prices, onDone }: { patient: Patient; prices: Procedu
   const [jaw, setJaw] = useState("");
   const [brokenBrackets, setBrokenBrackets] = useState("0");
   const [breakReason, setBreakReason] = useState("");
-  const [paidAmount, setPaidAmount] = useState(carried?.paymentMethod === "installments" ? String(carried.paidAmount || "") : "");
   const [notes, setNotes] = useState("");
   const [editingId, setEditingId] = useState("");
   const [error, setError] = useState("");
@@ -439,7 +438,6 @@ function Visits({ patient, prices, onDone }: { patient: Patient; prices: Procedu
     setJaw("");
     setBrokenBrackets("0");
     setBreakReason("");
-    setPaidAmount(keepContract && (paymentMethod || previous?.paymentMethod) === "installments" ? paidAmount : "");
     setNotes("");
     setEditingId("");
   }
@@ -454,7 +452,6 @@ function Visits({ patient, prices, onDone }: { patient: Patient; prices: Procedu
     setJaw(visit.jaw);
     setBrokenBrackets(String(visit.brokenBrackets || 0));
     setBreakReason(visit.breakReason);
-    setPaidAmount(visit.paymentMethod === "installments" ? String(visit.paidAmount || "") : "");
     setNotes(visit.notes);
   }
 
@@ -473,7 +470,6 @@ function Visits({ patient, prices, onDone }: { patient: Patient; prices: Procedu
         jaw: procedure?.jaw ? jaw : "",
         brokenBrackets: broken,
         breakReason: broken > 0 ? breakReason : "",
-        paidAmount: paymentMethod === "installments" ? Number(paidAmount) || 0 : undefined,
       };
       if (editingId) await mutate(`/api/visits/${editingId}`, "PATCH", body);
       else await mutate(`/api/patients/${patient.id}/visits`, "POST", body);
@@ -531,11 +527,6 @@ function Visits({ patient, prices, onDone }: { patient: Patient; prices: Procedu
         ) : (
           <div className="hidden sm:block" />
         )}
-        {paymentMethod === "installments" ? (
-          <Field label="المبلغ المدفوع اليوم">
-            <TextInput dir="ltr" className="text-right" inputMode="decimal" value={paidAmount} onChange={(event) => setPaidAmount(event.target.value)} />
-          </Field>
-        ) : null}
         <Field label="عدد البراكتات المكسورة">
           <TextInput
             dir="ltr"
@@ -588,10 +579,7 @@ function Visits({ patient, prices, onDone }: { patient: Patient; prices: Procedu
                   <td className="px-4 py-3 font-extrabold text-sage-900">{formatLong(visit.visitDate)}</td>
                   <td className="px-4 py-3">{visit.nextVisit ? formatLong(visit.nextVisit) : "—"}</td>
                   <td className="px-4 py-3">{optionLabel(PATIENT_TYPES, visit.patientType) || "—"}</td>
-                  <td className="px-4 py-3">
-                    {optionLabel(PAYMENT_METHODS, visit.paymentMethod) || "—"}
-                    {visit.procedureCode ? <p className="mt-1 text-xs text-slate-500">مدفوع {formatMoney(visit.paidAmount)}</p> : null}
-                  </td>
+                  <td className="px-4 py-3">{optionLabel(PAYMENT_METHODS, visit.paymentMethod) || "—"}</td>
                   <td className="px-4 py-3">
                     {optionLabel(PROCEDURES, visit.procedureCode) || visit.procedures || "—"}
                     {visit.jaw ? <p className="mt-1 text-xs text-slate-500">{optionLabel(VISIT_JAWS, visit.jaw)}</p> : null}
