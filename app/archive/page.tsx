@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarRange, ChevronLeft, CircleCheck, CircleDashed, FileOutput, FolderSearch } from "lucide-react";
+import { CalendarRange, ChevronLeft, CircleCheck, CircleDashed, FileOutput, FolderSearch, Lock } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { getStats, listAttendanceVisits, listReportDocs } from "@/lib/cached";
 import { requirePage } from "@/lib/guard";
@@ -37,6 +37,21 @@ export default async function ArchivePage() {
         description="الملفات المغلقة والتقارير السنوية لزيارات الحضور. الحالات الجارية تبقى في قائمة الحالات."
       />
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {user.role === "admin" ? (
+          <Link
+            href="/archive/daily"
+            className="group rounded-[1.75rem] border border-white bg-white p-5 shadow-[0_18px_50px_-32px_rgba(36,63,50,0.5)] transition hover:-translate-y-0.5"
+          >
+            <span className="grid h-14 w-14 place-items-center rounded-2xl bg-sage-50 text-sage-700 transition group-hover:bg-sage-700 group-hover:text-white">
+              <Lock size={24} />
+            </span>
+            <span className="mt-4 flex items-center justify-between">
+              <span className="text-lg font-extrabold">تقارير الأيام المقفلة</span>
+              <ChevronLeft size={18} className="text-sage-500" />
+            </span>
+            <span className="mt-2 block text-sm leading-7 text-slate-600">نسخ التقارير اليومية بعد الإقفال. لا تظهر للطبيبة ولا تُعدَّل.</span>
+          </Link>
+        ) : null}
         {cards.map((card) => {
           const Icon = card.icon;
           return (

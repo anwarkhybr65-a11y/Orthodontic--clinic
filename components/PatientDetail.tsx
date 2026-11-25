@@ -15,9 +15,10 @@ import { Button, Choice, Field, SectionCard, TextArea, TextInput } from "@/compo
 import { mutate } from "@/lib/api-client";
 import { APPLIANCE_OPTIONS, GOAL_LABELS, RECORD_OPTIONS, jawLabel } from "@/lib/constants";
 import type { ClinicUser } from "@/lib/db";
-import { formatDate, formatLong, todayISO } from "@/lib/format";
+import { formatDate, formatLong, formatMoney, todayISO } from "@/lib/format";
+import { BREAK_REASONS, PATIENT_TYPES, PAYMENT_METHODS, PROCEDURES, VISIT_JAWS, optionLabel, priceCode, procedureOf } from "@/lib/procedures";
 import { can, type Role } from "@/lib/permissions";
-import type { Patient, Status } from "@/lib/types";
+import type { Patient, ProcedurePrice, Status, Visit } from "@/lib/types";
 
 const tabs = [
   { id: "plan", label: "الخطة العلاجية" },
@@ -53,10 +54,12 @@ export function PatientDetail({
   patient,
   role = "admin",
   doctors = [],
+  prices = [],
 }: {
   patient: Patient;
   role?: Role;
   doctors?: ClinicUser[];
+  prices?: ProcedurePrice[];
 }) {
   const allow = {
     plan: can(role, "plan"),
@@ -383,7 +386,7 @@ export function PatientDetail({
         </div>
       ) : null}
 
-      {tab === "visits" && allow.visits ? <Visits patient={patient} onDone={() => router.refresh()} /> : null}
+      {tab === "visits" && allow.visits ? <Visits patient={patient} prices={prices} onDone={() => router.refresh()} /> : null}
       {tab === "images" && allow.images ? <ClinicalGallery patient={patient} onDone={() => router.refresh()} /> : null}
     </div>
   );
@@ -402,21 +405,57 @@ function Pill({ children }: { children: React.ReactNode }) {
   return <span className="rounded-full bg-sage-100 px-3 py-1 text-xs font-bold text-sage-800">{children}</span>;
 }
 
-function Visits({ patient, onDone }: { patient: Patient; onDone: () => void }) {
+function carriedVisit(visits: Visit[]) {
+  return visits.find((visit) => visit.patientType && visit.paymentMethod) ?? null;
+}
+
+function Visits({ patient, prices, onDone }: { patient: Patient; prices: ProcedurePrice[]; onDone: () => void }) {
+  const carried = carriedVisit(patient.visits);
   const [visitDate, setVisitDate] = useState(todayISO());
   const [nextVisit, setNextVisit] = useState("");
-  const [procedures, setProcedures] = useState("");
+  const [patientType, setPatientType] = useState(carried?.patientType ?? "");
+  const [paymentMethod, setPaymentMethod] = useState(carried?.paymentMethod ?? "");
+  const [procedureCode, setProcedureCode] = useState("");
+  const [jaw, setJaw] = useState("");
+  const [brokenBrackets, setBrokenBrackets] = useState("0");
+  const [breakReason, setBreakReason] = useState("");
+  const [paidAmount, setPaidAmount] = useState(carried?.paymentMethod === "installments" ? String(carried.paidAmount || "") : "");
   const [notes, setNotes] = useState("");
   const [editingId, setEditingId] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const procedure = procedureOf(procedureCode);
+  const broken = Math.max(0, Math.floor(Number(brokenBrackets) || 0));
+  const selectedPrice = priceCode(procedureCode, jaw);
+  const due = prices.find((item) => item.code === selectedPrice)?.price ?? 0;
 
-  function reset() {
+  function reset(keepContract = true) {
+    const previous = carriedVisit(patient.visits);
     setVisitDate(todayISO());
     setNextVisit("");
-    setProcedures("");
+    setPatientType(keepContract ? patientType || previous?.patientType || "" : "");
+    setPaymentMethod(keepContract ? paymentMethod || previous?.paymentMethod || "" : "");
+    setProcedureCode("");
+    setJaw("");
+    setBrokenBrackets("0");
+    setBreakReason("");
+    setPaidAmount(keepContract && (paymentMethod || previous?.paymentMethod) === "installments" ? paidAmount : "");
     setNotes("");
     setEditingId("");
+  }
+
+  function loadVisit(visit: Visit) {
+    setEditingId(visit.id);
+    setVisitDate(visit.visitDate);
+    setNextVisit(visit.nextVisit);
+    setPatientType(visit.patientType);
+    setPaymentMethod(visit.paymentMethod);
+    setProcedureCode(visit.procedureCode);
+    setJaw(visit.jaw);
+    setBrokenBrackets(String(visit.brokenBrackets || 0));
+    setBreakReason(visit.breakReason);
+    setPaidAmount(visit.paymentMethod === "installments" ? String(visit.paidAmount || "") : "");
+    setNotes(visit.notes);
   }
 
   async function add(event: React.FormEvent) {
@@ -424,7 +463,18 @@ function Visits({ patient, onDone }: { patient: Patient; onDone: () => void }) {
     setBusy(true);
     setError("");
     try {
-      const body = { visitDate, nextVisit, procedures, notes };
+      const body = {
+        visitDate,
+        nextVisit,
+        notes,
+        patientType,
+        paymentMethod,
+        procedureCode,
+        jaw: procedure?.jaw ? jaw : "",
+        brokenBrackets: broken,
+        breakReason: broken > 0 ? breakReason : "",
+        paidAmount: paymentMethod === "installments" ? Number(paidAmount) || 0 : undefined,
+      };
       if (editingId) await mutate(`/api/visits/${editingId}`, "PATCH", body);
       else await mutate(`/api/patients/${patient.id}/visits`, "POST", body);
       reset();
@@ -456,27 +506,77 @@ function Visits({ patient, onDone }: { patient: Patient; onDone: () => void }) {
         <Field label="الزيارة القادمة">
           <TextInput type="date" dir="ltr" className="text-right" value={nextVisit} onChange={(event) => setNextVisit(event.target.value)} />
         </Field>
-        <Field label="الإجراء / الخدمة المقدمة">
-          <TextInput value={procedures} maxLength={500} onChange={(event) => setProcedures(event.target.value)} />
+        <Field label="نوع المريض" required>
+          <Select value={patientType} required onChange={setPatientType} placeholder="اختاري نوع المريض" options={PATIENT_TYPES} />
         </Field>
-        <Field label="ملاحظات">
-          <TextArea value={notes} maxLength={4000} onChange={(event) => setNotes(event.target.value)} />
+        <Field label="طريقة الدفع في العقد" required>
+          <Select value={paymentMethod} required onChange={setPaymentMethod} placeholder="اختاري طريقة الدفع" options={PAYMENT_METHODS} />
         </Field>
+        <Field label="الإجراء / الخدمة المقدمة" required>
+          <Select
+            value={procedureCode}
+            required
+            onChange={(value) => {
+              setProcedureCode(value);
+              if (!procedureOf(value)?.jaw) setJaw("");
+            }}
+            placeholder="اختاري الإجراء"
+            options={PROCEDURES}
+          />
+        </Field>
+        {procedure?.jaw ? (
+          <Field label="الفك" required>
+            <Select value={jaw} required onChange={setJaw} placeholder="فك واحد أو فكين" options={VISIT_JAWS} />
+          </Field>
+        ) : (
+          <div className="hidden sm:block" />
+        )}
+        {paymentMethod === "installments" ? (
+          <Field label="المبلغ المدفوع اليوم">
+            <TextInput dir="ltr" className="text-right" inputMode="decimal" value={paidAmount} onChange={(event) => setPaidAmount(event.target.value)} />
+          </Field>
+        ) : null}
+        <Field label="عدد البراكتات المكسورة">
+          <TextInput
+            dir="ltr"
+            className="text-right"
+            type="number"
+            min={0}
+            step={1}
+            value={brokenBrackets}
+            onChange={(event) => {
+              setBrokenBrackets(event.target.value);
+              if (Math.floor(Number(event.target.value) || 0) <= 0) setBreakReason("");
+            }}
+          />
+        </Field>
+        {broken > 0 ? (
+          <Field label="سبب الكسر" required>
+            <Select value={breakReason} required onChange={setBreakReason} placeholder="اختاري سبب الكسر" options={BREAK_REASONS} />
+          </Field>
+        ) : null}
+        {selectedPrice ? <p className="text-sm font-extrabold text-sage-800 sm:col-span-2">سعر الإجراء: {formatMoney(due)}</p> : null}
+        <Field label="ملاحظات" required={Boolean(procedure?.notes)}>
+          <TextArea value={notes} maxLength={4000} required={Boolean(procedure?.notes)} onChange={(event) => setNotes(event.target.value)} />
+        </Field>
+        {procedure?.notes ? <p className="text-sm font-bold text-amber-800 sm:col-span-2">هذا الإجراء لا يُحفظ دون كتابة ملاحظات.</p> : null}
         {error ? <p className="text-sm font-semibold text-rose-700 sm:col-span-2">{error}</p> : null}
         <div className="flex gap-2 sm:col-span-2">
-          <Button type="submit" disabled={busy}>{busy ? "جارٍ الحفظ..." : editingId ? "حفظ التعديل" : "إضافة زيارة"}</Button>
-          {editingId ? <Button type="button" variant="ghost" onClick={reset}>إلغاء</Button> : null}
+          <Button type="submit" disabled={busy}>{busy ? "جارٍ الحفظ..." : editingId ? "حفظ التعديل" : "حفظ الزيارة"}</Button>
+          {editingId ? <Button type="button" variant="ghost" onClick={() => reset()}>إلغاء</Button> : null}
         </div>
       </form>
       {patient.visits.length === 0 ? (
         <p className="rounded-[1.5rem] bg-white px-4 py-8 text-center text-sm text-slate-500">لا توجد زيارات مسجّلة بعد.</p>
       ) : (
         <div className="overflow-x-auto rounded-[1.75rem] border border-white bg-white shadow-sm">
-          <table className="w-full min-w-[40rem] text-right text-sm">
+          <table className="w-full min-w-[52rem] text-right text-sm">
             <thead className="bg-sage-50 text-xs font-bold text-sage-800">
               <tr>
                 <th className="px-4 py-3">تاريخ الزيارة</th>
                 <th className="px-4 py-3">الزيارة القادمة</th>
+                <th className="px-4 py-3">نوع المريض</th>
+                <th className="px-4 py-3">الدفع</th>
                 <th className="px-4 py-3">الإجراء / الخدمة المقدمة</th>
                 <th className="px-4 py-3">ملاحظات</th>
                 <th className="px-4 py-3">إجراءات</th>
@@ -487,25 +587,24 @@ function Visits({ patient, onDone }: { patient: Patient; onDone: () => void }) {
                 <tr key={visit.id} className="border-t border-sage-100 align-top">
                   <td className="px-4 py-3 font-extrabold text-sage-900">{formatLong(visit.visitDate)}</td>
                   <td className="px-4 py-3">{visit.nextVisit ? formatLong(visit.nextVisit) : "—"}</td>
+                  <td className="px-4 py-3">{optionLabel(PATIENT_TYPES, visit.patientType) || "—"}</td>
                   <td className="px-4 py-3">
-                    {visit.procedures || "—"}
+                    {optionLabel(PAYMENT_METHODS, visit.paymentMethod) || "—"}
+                    {visit.procedureCode ? <p className="mt-1 text-xs text-slate-500">مدفوع {formatMoney(visit.paidAmount)}</p> : null}
+                  </td>
+                  <td className="px-4 py-3">
+                    {optionLabel(PROCEDURES, visit.procedureCode) || visit.procedures || "—"}
+                    {visit.jaw ? <p className="mt-1 text-xs text-slate-500">{optionLabel(VISIT_JAWS, visit.jaw)}</p> : null}
+                    {visit.brokenBrackets > 0 ? (
+                      <p className="mt-1 text-xs text-slate-500">براكت مكسور: {visit.brokenBrackets} · {optionLabel(BREAK_REASONS, visit.breakReason) || "—"}</p>
+                    ) : null}
                     {visit.automatic ? <p className="mt-1 text-xs font-bold text-sage-600">من تأكيد الحضور</p> : null}
                   </td>
                   <td className="px-4 py-3 whitespace-pre-wrap text-slate-600">{visit.notes || "—"}</td>
                   <td className="px-4 py-3">
                     {visit.automatic ? null : (
                       <div className="flex gap-2">
-                        <button
-                          type="button"
-                          className="rounded-xl bg-sage-50 px-3 py-2 text-xs font-bold text-sage-800"
-                          onClick={() => {
-                            setEditingId(visit.id);
-                            setVisitDate(visit.visitDate);
-                            setNextVisit(visit.nextVisit);
-                            setProcedures(visit.procedures);
-                            setNotes(visit.notes);
-                          }}
-                        >
+                        <button type="button" className="rounded-xl bg-sage-50 px-3 py-2 text-xs font-bold text-sage-800" onClick={() => loadVisit(visit)}>
                           تعديل
                         </button>
                         <button type="button" onClick={() => remove(visit.id)} className="text-slate-400 hover:text-rose-700" aria-label="حذف الزيارة">
@@ -521,5 +620,28 @@ function Visits({ patient, onDone }: { patient: Patient; onDone: () => void }) {
         </div>
       )}
     </div>
+  );
+}
+
+function Select({
+  value,
+  onChange,
+  options,
+  placeholder,
+  required,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly { id: string; label: string }[];
+  placeholder: string;
+  required?: boolean;
+}) {
+  return (
+    <select value={value} required={required} onChange={(event) => onChange(event.target.value)} className="w-full rounded-2xl border border-sage-200 bg-white px-4 py-3 text-sm">
+      <option value="">{placeholder}</option>
+      {options.map((item) => (
+        <option key={item.id} value={item.id}>{item.label}</option>
+      ))}
+    </select>
   );
 }

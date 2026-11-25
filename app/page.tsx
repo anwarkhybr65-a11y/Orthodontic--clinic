@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { Archive, Bell, CalendarCheck, CalendarClock, ChevronLeft, ClipboardList, ClipboardPlus, FileOutput, UserPlus, Users } from "lucide-react";
+import { Archive, Bell, CalendarCheck, CalendarClock, ChevronLeft, ClipboardList, ClipboardPlus, FileOutput, NotebookText, Scale, Tags, UserPlus, Users, Wallet } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { getFacilityName, getNavCounts, getStats, countNewIntakes, listFollowups, listTodayAttendance } from "@/lib/cached";
+import { getFacilityName, getNavCounts, getStats, countNewIntakes, listDebts, listFollowups, listReconciliation, listTodayAttendance } from "@/lib/cached";
 import { formatLong, todayISO } from "@/lib/format";
 import { requireUser } from "@/lib/guard";
 import { can, scopeFor } from "@/lib/permissions";
@@ -14,15 +14,18 @@ export default async function HomePage() {
   const scope = scopeFor(user);
   const doctorId = user.role === "doctor" ? user.id : undefined;
   const seesNotices = user.role === "doctor" || user.role === "admin";
-  const [facilityName, counts, stats, attendance, followupItems, newCases] = await Promise.all([
+  const [facilityName, counts, stats, attendance, followupItems, newCases, reconcile, debtCases] = await Promise.all([
     getFacilityName(),
     getNavCounts(scope, doctorId),
     getStats(scope),
     listTodayAttendance(),
     seesNotices ? listFollowups(doctorId) : Promise.resolve([]),
     seesNotices ? countNewIntakes(scope) : Promise.resolve(0),
+    user.role === "reception" ? listReconciliation() : Promise.resolve(null),
+    can(user.role, "debts") ? listDebts() : Promise.resolve([]),
   ]);
   const attendanceCount = attendance.length;
+  const reconcileGap = reconcile ? reconcile.attendance - reconcile.recordedPatients : 0;
   const notices = followupItems.filter((item) => !item.read).slice(0, 4);
   const showPlanAlert = seesNotices && counts.pending > 0;
   const cards = [
@@ -37,6 +40,9 @@ export default async function HomePage() {
     { href: "/patients?filter=incomplete", label: "قيد العلاج", value: stats.incomplete, icon: Users, show: can(user.role, "patients"), alert: false },
     { href: "/patients?filter=pending", label: "بلا خطة", value: counts.pending, icon: ClipboardList, show: user.role === "doctor" || user.role === "admin", alert: false },
     { href: "/appointments#attendance", label: "حضور اليوم", value: attendanceCount, icon: CalendarCheck, show: true, alert: false },
+    { href: "/daily", label: "التقارير اليومية", value: attendanceCount, icon: NotebookText, show: user.role === "doctor" || user.role === "admin", alert: false },
+    { href: "/reconcile", label: "المطابقة اليومية", value: reconcileGap, icon: Scale, show: user.role === "reception", alert: reconcileGap !== 0 },
+    { href: "/debts", label: "المديونيات", value: debtCases.length, icon: Wallet, show: can(user.role, "debts"), alert: false },
     { href: "/appointments", label: "مواعيد محجوزة", value: counts.upcoming, icon: CalendarClock, show: can(user.role, "appointments"), alert: false },
     {
       href: "/followups",
@@ -89,6 +95,13 @@ export default async function HomePage() {
       text: "المنتهية، غير المنتهية، المخالصات، والتقارير السنوية.",
       icon: Archive,
       show: can(user.role, "archive"),
+    },
+    {
+      href: "/prices",
+      title: "الأسعار",
+      text: "تحديد سعر كل إجراء. الصفحة متاحة لحساب الإدارة فقط.",
+      icon: Tags,
+      show: can(user.role, "prices"),
     },
   ].filter((section) => section.show);
   const cta =

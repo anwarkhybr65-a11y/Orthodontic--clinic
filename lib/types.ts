@@ -31,6 +31,14 @@ export type Visit = {
   nextVisit: string;
   procedures: string;
   notes: string;
+  patientType: string;
+  paymentMethod: string;
+  procedureCode: string;
+  jaw: string;
+  brokenBrackets: number;
+  breakReason: string;
+  dueAmount: number;
+  paidAmount: number;
   automatic: boolean;
   createdAt: string;
 };
@@ -196,8 +204,99 @@ export type VisitInput = {
   visitDate: string;
   visitTime?: string;
   nextVisit?: string;
-  procedures: string;
+  procedures?: string;
   notes: string;
+  patientType?: string;
+  paymentMethod?: string;
+  procedureCode?: string;
+  jaw?: string;
+  brokenBrackets?: number;
+  breakReason?: string;
+  paidAmount?: number;
+};
+
+export type ProcedurePrice = {
+  code: string;
+  price: number;
+};
+
+export type DailyVisitRow = {
+  id: string;
+  patientId: string;
+  patientName: string;
+  fileNumber: string;
+  recordedAt: string;
+  patientType: string;
+  paymentMethod: string;
+  procedureCode: string;
+  procedureText: string;
+  jaw: string;
+  brokenBrackets: number;
+  breakReason: string;
+  due: number;
+  paid: number;
+};
+
+export type AdminDayLine = {
+  id: string;
+  patientId: string;
+  patientName: string;
+  procedureText: string;
+  jaw: string;
+  brokenBrackets: number;
+  breakReason: string;
+  due: number;
+  paid: number;
+  difference: number;
+  notes: string;
+};
+
+export type AdminDayReport = {
+  date: string;
+  attendance: number;
+  recordedPatients: number;
+  gap: number;
+  due: number;
+  paid: number;
+  remaining: number;
+  unpriced: number;
+  missing: Array<{ patientName: string; fileNumber: string }>;
+  alerts: string[];
+  lines: AdminDayLine[];
+  closed: boolean;
+  closedAt: string;
+};
+
+export type ReconciliationVisit = {
+  id: string;
+  patientId: string;
+  patientName: string;
+  fileNumber: string;
+  doctor: string;
+  procedureText: string;
+  due: number;
+  paid: number;
+  carried: number;
+};
+
+export type ReconciliationGap = {
+  patientId: string;
+  patientName: string;
+  fileNumber: string;
+  doctor: string;
+};
+
+export type DebtCase = {
+  patientId: string;
+  patientName: string;
+  fileNumber: string;
+  phone: string;
+  doctor: string;
+  procedureText: string;
+  visitDate: string;
+  due: number;
+  paid: number;
+  remaining: number;
 };
 
 export type RecordInput = {

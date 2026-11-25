@@ -33,6 +33,11 @@ export function formatClock(iso: string) {
   }).format(date);
 }
 
+export function formatMoney(value: number) {
+  const amount = Number.isFinite(value) ? value : 0;
+  return `${new Intl.NumberFormat("ar-SA-u-nu-latn", { maximumFractionDigits: 2 }).format(amount)} ر.س`;
+}
+
 export function formatDate(isoDate: string) {
   if (!isoDate) return "—";
   return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {

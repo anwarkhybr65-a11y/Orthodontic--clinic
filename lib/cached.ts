@@ -18,6 +18,12 @@ import {
   listPatients as loadPatients,
   listReportDocs as loadReportDocs,
   listTodayAttendance as loadTodayAttendance,
+  listDailyVisits as loadDailyVisits,
+  listDebts as loadDebts,
+  listReconciliation as loadReconciliation,
+  getAdminDayReport as loadAdminDayReport,
+  listClosedDays as loadClosedDays,
+  listProcedurePrices as loadProcedurePrices,
   listUsers as loadUsers,
 } from "@/lib/db";
 import { todayISO } from "@/lib/format";
@@ -53,6 +59,18 @@ const todayAttendance = remember("today-attendance", async (day: string, key: st
   return loadTodayAttendance(scopeFromKey(key));
 });
 const followups = remember("followups", async (doctorId: string) => loadFollowups(doctorId || undefined));
+const dailyVisits = remember("daily-visits", async (day: string, key: string) => {
+  void day;
+  return loadDailyVisits(scopeFromKey(key));
+});
+const procedurePrices = remember("procedure-prices", async () => loadProcedurePrices());
+const reconciliation = remember("reconciliation", async (day: string) => {
+  void day;
+  return loadReconciliation();
+});
+const debts = remember("debts", async () => loadDebts());
+const adminDay = remember("admin-day", async (day: string) => loadAdminDayReport(day));
+const closedDays = remember("closed-days", async () => loadClosedDays());
 const reportDocs = remember("report-docs", async (key: string) => loadReportDocs(scopeFromKey(key)));
 const discharge = remember("discharge", async (id: string) => loadDischarge(id));
 const users = remember("users", async () => loadUsers());
@@ -108,6 +126,30 @@ export function listAttendanceVisits(scope?: PatientScope) {
 
 export function listTodayAttendance(scope?: PatientScope) {
   return todayAttendance(todayISO(), scopeKey(scope));
+}
+
+export function listDailyVisits(scope?: PatientScope) {
+  return dailyVisits(todayISO(), scopeKey(scope));
+}
+
+export function listProcedurePrices() {
+  return procedurePrices();
+}
+
+export function listReconciliation() {
+  return reconciliation(todayISO());
+}
+
+export function listDebts() {
+  return debts();
+}
+
+export function getAdminDayReport(date = todayISO()) {
+  return adminDay(date);
+}
+
+export function listClosedDays() {
+  return closedDays();
 }
 
 export function listFollowups(doctorId?: string) {

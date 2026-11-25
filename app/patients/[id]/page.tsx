@@ -5,7 +5,7 @@ import { BackLink } from "@/components/BackLink";
 import { FollowupSender } from "@/components/FollowupSender";
 import { PatientDetail } from "@/components/PatientDetail";
 import { PlanDocument } from "@/components/PlanDocument";
-import { getPatient, listDoctors } from "@/lib/cached";
+import { getPatient, listDoctors, listProcedurePrices } from "@/lib/cached";
 import { clearIntakeAlert } from "@/lib/db";
 import { assertPatient, requireUser } from "@/lib/guard";
 import { can } from "@/lib/permissions";
@@ -19,6 +19,7 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
   if (!can(user.role, "patients")) notFound();
   const { id } = await params;
   const doctorsPromise = user.role === "admin" ? listDoctors() : Promise.resolve([]);
+  const pricesPromise = listProcedurePrices();
   const patient = await getPatient(id);
   if (!patient) notFound();
   if (user.role !== "customer_service" && user.role !== "reception") {
@@ -75,7 +76,7 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
     );
   }
 
-  return <PatientDetail patient={patient} role={user.role} doctors={await doctorsPromise} />;
+  return <PatientDetail patient={patient} role={user.role} doctors={await doctorsPromise} prices={await pricesPromise} />;
 }
 
 function Item({ label, value }: { label: string; value: string }) {

@@ -11,14 +11,18 @@ export type Action =
   | "records"
   | "appointments"
   | "discharge"
-  | "archive";
+  | "archive"
+  | "prices"
+  | "dailyReport"
+  | "reconcile"
+  | "debts";
 
 const grants: Record<Role, Action[]> = {
-  admin: ["users", "intake", "fullRegister", "patients", "plan", "images", "visits", "records", "appointments", "discharge", "archive"],
-  doctor: ["patients", "plan", "images", "visits", "records", "appointments", "discharge", "archive"],
-  reception: ["intake", "patients", "appointments"],
+  admin: ["users", "intake", "fullRegister", "patients", "plan", "images", "visits", "records", "appointments", "discharge", "archive", "prices", "dailyReport", "reconcile", "debts"],
+  doctor: ["patients", "plan", "images", "visits", "records", "appointments", "discharge", "archive", "dailyReport"],
+  reception: ["intake", "patients", "appointments", "reconcile", "debts"],
   nurse: ["patients", "images", "visits", "records", "archive"],
-  customer_service: ["patients", "appointments", "archive"],
+  customer_service: ["patients", "appointments", "archive", "debts"],
 };
 
 export type SessionUser = {

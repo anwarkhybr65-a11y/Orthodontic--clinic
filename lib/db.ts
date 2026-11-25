@@ -33,10 +33,17 @@ import type {
   Status,
   Visit,
   VisitInput,
+  ReconciliationGap,
+  ReconciliationVisit,
+  DebtCase,
+  AdminDayReport,
   AttendanceEntry,
   AttendanceVisit,
+  DailyVisitRow,
   FollowupNotice,
+  ProcedurePrice,
 } from "@/lib/types";
+import { BREAK_REASONS, PATIENT_TYPES, PAYMENT_METHODS, VISIT_JAWS, priceCatalog, priceCode, procedureOf } from "@/lib/procedures";
 
 type Row = Record<string, unknown>;
 type Executor = Client | Transaction;
@@ -107,6 +114,12 @@ function str(row: Row, key: string) {
 
 function flag(value: unknown) {
   return value === true || value === 1 || value === "1" || (typeof value === "bigint" && value === BigInt(1));
+}
+
+function amountOf(value: unknown) {
+  if (typeof value === "bigint") return Number(value);
+  const amount = Number(value ?? 0);
+  return Number.isFinite(amount) ? amount : 0;
 }
 
 function countOf(row: Row | undefined) {
@@ -365,6 +378,13 @@ async function migrate(db: Sql) {
     CREATE INDEX IF NOT EXISTS idx_appt_date ON appointments(appointment_date);
     CREATE INDEX IF NOT EXISTS idx_attendance_date ON daily_attendance(attend_date);
     CREATE INDEX IF NOT EXISTS idx_followups_doctor ON followups(doctor_id, created_at);
+    CREATE TABLE IF NOT EXISTS daily_closures (
+      id TEXT PRIMARY KEY,
+      report_date TEXT NOT NULL UNIQUE,
+      payload TEXT NOT NULL,
+      closed_by TEXT NOT NULL DEFAULT '',
+      closed_at TEXT NOT NULL
+    );
   `);
   await db.prepare(
     `INSERT INTO settings(key, value) VALUES('facility_name', 'عيادة تقويم الأسنان')
@@ -376,6 +396,24 @@ async function migrate(db: Sql) {
   await ensureColumn(db, "patients", "intake_new", "INTEGER NOT NULL DEFAULT 0");
   await ensureColumn(db, "visits", "visit_time", "TEXT NOT NULL DEFAULT ''");
   await ensureColumn(db, "visits", "next_visit", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(db, "visits", "patient_type", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(db, "visits", "payment_method", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(db, "visits", "procedure_code", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(db, "visits", "visit_jaw", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(db, "visits", "broken_brackets", "INTEGER NOT NULL DEFAULT 0");
+  await ensureColumn(db, "visits", "break_reason", "TEXT NOT NULL DEFAULT ''");
+  await ensureColumn(db, "visits", "due_amount", "REAL NOT NULL DEFAULT 0");
+  await ensureColumn(db, "visits", "paid_amount", "REAL NOT NULL DEFAULT 0");
+  await ensureColumn(db, "visits", "procedure_due", "REAL NOT NULL DEFAULT 0");
+  await ensureColumn(db, "visits", "carried_in", "REAL NOT NULL DEFAULT 0");
+  await db.prepare(`UPDATE visits SET procedure_due = due_amount WHERE procedure_due = 0 AND carried_in = 0 AND due_amount > 0`).run();
+  await db.exec(`CREATE TABLE IF NOT EXISTS procedure_prices (
+      code TEXT PRIMARY KEY,
+      price REAL NOT NULL DEFAULT 0
+    );`);
+  for (const item of priceCatalog()) {
+    await db.prepare(`INSERT INTO procedure_prices (code, price) VALUES (?, 0) ON CONFLICT(code) DO NOTHING`).run(item.code);
+  }
   await ensureColumn(db, "daily_attendance", "source", "TEXT NOT NULL DEFAULT ''");
   await ensureColumn(db, "clinical_images", "phase", "TEXT NOT NULL DEFAULT 'before'");
   await ensureColumn(db, "clinical_images", "url", "TEXT NOT NULL DEFAULT ''");
@@ -478,6 +516,14 @@ function mapVisit(row: Row): Visit {
     nextVisit: str(row, "next_visit"),
     procedures: str(row, "procedures"),
     notes: str(row, "notes"),
+    patientType: str(row, "patient_type"),
+    paymentMethod: str(row, "payment_method"),
+    procedureCode: str(row, "procedure_code"),
+    jaw: str(row, "visit_jaw"),
+    brokenBrackets: amountOf(row.broken_brackets),
+    breakReason: str(row, "break_reason"),
+    dueAmount: amountOf(row.due_amount),
+    paidAmount: amountOf(row.paid_amount),
     automatic: flag(row.auto),
     createdAt: str(row, "created_at"),
   };
@@ -1001,51 +1047,178 @@ async function ensurePatient(id: string) {
   if (!row) throw new ClinicError("ملف المريض غير موجود", 404);
 }
 
-export async function addVisit(patientId: string, input: VisitInput) {
-  await ensurePatient(patientId);
+function knownId(list: readonly { id: string }[], value: string) {
+  return list.some((item) => item.id === value);
+}
+
+async function pricedVisit(input: VisitInput) {
   const visitDate = clip(input.visitDate ?? "", 20);
   const visitTime = clip(input.visitTime ?? "", 10);
   const nextVisit = clip(input.nextVisit ?? "", 20);
-  const procedures = clip(input.procedures ?? "");
   const notes = clip(input.notes ?? "");
+  const patientType = clip(input.patientType ?? "", 40);
+  const paymentMethod = clip(input.paymentMethod ?? "", 40);
+  const procedureCode = clip(input.procedureCode ?? "", 40);
+  const jaw = clip(input.jaw ?? "", 20);
+  const brokenBrackets = Math.max(0, Math.floor(amountOf(input.brokenBrackets)));
+  const breakReason = clip(input.breakReason ?? "", 40);
   if (!visitDate) throw new ClinicError("تاريخ الزيارة مطلوب");
-  if (!procedures && !notes) throw new ClinicError("أضف الإجراء أو ملاحظة الزيارة");
+  if (!knownId(PATIENT_TYPES, patientType)) throw new ClinicError("اختاري نوع المريض");
+  if (!knownId(PAYMENT_METHODS, paymentMethod)) throw new ClinicError("اختاري طريقة الدفع");
+  const procedure = procedureOf(procedureCode);
+  if (!procedure) throw new ClinicError("اختاري الإجراء");
+  if (procedure.notes && !notes) throw new ClinicError("اكتبي الملاحظات قبل الحفظ");
+  if (procedure.jaw && !knownId(VISIT_JAWS, jaw)) throw new ClinicError("حددي فك واحد أو فكين");
+  if (!procedure.jaw && jaw) throw new ClinicError("هذا الإجراء لا يحتاج تحديد الفك");
+  if (brokenBrackets > 0 && !knownId(BREAK_REASONS, breakReason)) throw new ClinicError("حددي سبب كسر البراكت");
+  const priceRow = one(await (await getDb()).prepare(`SELECT price FROM procedure_prices WHERE code = ?`).get(priceCode(procedureCode, jaw)));
+  const procedureDue = money(amountOf(priceRow?.price));
+  const settlesInFull = paymentMethod !== "installments";
+  const paid = settlesInFull ? null : money(Math.max(0, amountOf(input.paidAmount)));
+  return {
+    visitDate,
+    visitTime,
+    nextVisit,
+    notes,
+    patientType,
+    paymentMethod,
+    procedureCode,
+    procedures: procedure.label,
+    jaw: procedure.jaw ? jaw : "",
+    brokenBrackets,
+    breakReason: brokenBrackets > 0 ? breakReason : "",
+    procedureDue,
+    paid,
+  };
+}
+
+function money(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+async function rebalancePatient(patientId: string) {
+  const rows = many(
+    await (await getDb())
+      .prepare(
+        `SELECT id, procedure_due, carried_in, due_amount, paid_amount
+         FROM visits WHERE patient_id = ? AND auto = 0
+         ORDER BY visit_date ASC, created_at ASC`,
+      )
+      .all(patientId),
+  );
+  let carry = 0;
+  for (const row of rows) {
+    const procedureDue = money(amountOf(row.procedure_due));
+    const due = money(procedureDue + carry);
+    const paid = money(amountOf(row.paid_amount));
+    if (money(amountOf(row.carried_in)) !== carry || money(amountOf(row.due_amount)) !== due) {
+      await (await getDb())
+        .prepare(`UPDATE visits SET carried_in = ?, due_amount = ? WHERE id = ?`)
+        .run(carry, due, str(row, "id"));
+    }
+    carry = money(Math.max(0, due - paid));
+  }
+}
+
+async function settleVisit(id: string, patientId: string, paid: number | null) {
+  if (paid === null) {
+    const row = one(await (await getDb()).prepare(`SELECT due_amount FROM visits WHERE id = ?`).get(id));
+    await (await getDb()).prepare(`UPDATE visits SET paid_amount = ? WHERE id = ?`).run(money(amountOf(row?.due_amount)), id);
+  }
+  await rebalancePatient(patientId);
+  if (paid === null) {
+    const row = one(await (await getDb()).prepare(`SELECT due_amount FROM visits WHERE id = ?`).get(id));
+    await (await getDb()).prepare(`UPDATE visits SET paid_amount = ? WHERE id = ?`).run(money(amountOf(row?.due_amount)), id);
+    await rebalancePatient(patientId);
+  }
+}
+
+export async function addVisit(patientId: string, input: VisitInput) {
+  await ensurePatient(patientId);
+  const visit = await pricedVisit(input);
   const id = randomUUID();
   const now = new Date().toISOString();
-  const db = await getDb();
-  await db
+  await (await getDb())
     .prepare(
-      `INSERT INTO visits (id, patient_id, appointment_id, visit_date, visit_time, next_visit, procedures, notes, auto, created_at)
-       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, 0, ?)`,
+      `INSERT INTO visits (
+        id, patient_id, appointment_id, visit_date, visit_time, next_visit, procedures, notes, auto, created_at,
+        patient_type, payment_method, procedure_code, visit_jaw, broken_brackets, break_reason,
+        due_amount, paid_amount, procedure_due, carried_in
+      ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
     )
-    .run(id, patientId, visitDate, visitTime, nextVisit, procedures, notes, now);
+    .run(
+      id,
+      patientId,
+      visit.visitDate,
+      visit.visitTime,
+      visit.nextVisit,
+      visit.procedures,
+      visit.notes,
+      now,
+      visit.patientType,
+      visit.paymentMethod,
+      visit.procedureCode,
+      visit.jaw,
+      visit.brokenBrackets,
+      visit.breakReason,
+      visit.procedureDue,
+      visit.paid ?? 0,
+      visit.procedureDue,
+    );
+  await settleVisit(id, patientId, visit.paid);
   await clearPatientFollowups(patientId);
   changed();
   return id;
 }
 
 export async function updateVisit(id: string, input: VisitInput) {
-  const row = one(await (await getDb()).prepare(`SELECT id, auto FROM visits WHERE id = ?`).get(id));
+  const row = one(await (await getDb()).prepare(`SELECT id, auto, patient_id FROM visits WHERE id = ?`).get(id));
   if (!row) throw new ClinicError("الزيارة غير موجودة", 404);
   if (flag(row.auto)) throw new ClinicError("زيارة تأكيد الحضور تُعدَّل من الموعد");
-  const visitDate = clip(input.visitDate ?? "", 20);
-  const visitTime = clip(input.visitTime ?? "", 10);
-  const nextVisit = clip(input.nextVisit ?? "", 20);
-  const procedures = clip(input.procedures ?? "");
-  const notes = clip(input.notes ?? "");
-  if (!visitDate) throw new ClinicError("تاريخ الزيارة مطلوب");
-  if (!procedures && !notes) throw new ClinicError("أضف الإجراء أو ملاحظة الزيارة");
-  const patientRow = one(await (await getDb()).prepare(`SELECT patient_id FROM visits WHERE id = ?`).get(id));
+  const visit = await pricedVisit(input);
   await (await getDb())
-    .prepare(`UPDATE visits SET visit_date = ?, visit_time = ?, next_visit = ?, procedures = ?, notes = ? WHERE id = ?`)
-    .run(visitDate, visitTime, nextVisit, procedures, notes, id);
-  if (patientRow) await clearPatientFollowups(str(patientRow, "patient_id"));
+    .prepare(
+      `UPDATE visits SET visit_date = ?, visit_time = ?, next_visit = ?, procedures = ?, notes = ?,
+        patient_type = ?, payment_method = ?, procedure_code = ?, visit_jaw = ?, broken_brackets = ?,
+        break_reason = ?, procedure_due = ?, paid_amount = ? WHERE id = ?`,
+    )
+    .run(
+      visit.visitDate,
+      visit.visitTime,
+      visit.nextVisit,
+      visit.procedures,
+      visit.notes,
+      visit.patientType,
+      visit.paymentMethod,
+      visit.procedureCode,
+      visit.jaw,
+      visit.brokenBrackets,
+      visit.breakReason,
+      visit.procedureDue,
+      visit.paid ?? 0,
+      id,
+    );
+  const patientId = str(row, "patient_id");
+  await settleVisit(id, patientId, visit.paid);
+  await clearPatientFollowups(patientId);
   changed();
 }
 
 export async function deleteVisit(id: string) {
-  const result = await (await getDb()).prepare(`DELETE FROM visits WHERE id = ?`).run(id);
-  if (!result.changes) throw new ClinicError("الزيارة غير موجودة", 404);
+  const row = one(await (await getDb()).prepare(`SELECT patient_id FROM visits WHERE id = ?`).get(id));
+  if (!row) throw new ClinicError("الزيارة غير موجودة", 404);
+  await (await getDb()).prepare(`DELETE FROM visits WHERE id = ?`).run(id);
+  await rebalancePatient(str(row, "patient_id"));
+  changed();
+}
+
+export async function setVisitPayment(id: string, paidAmount: number) {
+  const row = one(await (await getDb()).prepare(`SELECT id, auto, patient_id FROM visits WHERE id = ?`).get(id));
+  if (!row) throw new ClinicError("الزيارة غير موجودة", 404);
+  if (flag(row.auto)) throw new ClinicError("زيارة تأكيد الحضور لا يُسجَّل لها مبلغ من المطابقة");
+  const paid = money(Math.max(0, amountOf(paidAmount)));
+  await (await getDb()).prepare(`UPDATE visits SET paid_amount = ? WHERE id = ?`).run(paid, id);
+  await rebalancePatient(str(row, "patient_id"));
   changed();
 }
 
@@ -1631,6 +1804,62 @@ export async function listTodayAttendance(scope?: PatientScope){
   }));
 }
 
+export async function listProcedurePrices(): Promise<ProcedurePrice[]> {
+  const rows = many(await (await getDb()).prepare(`SELECT code, price FROM procedure_prices`).all());
+  const saved = new Map(rows.map((row) => [str(row, "code"), amountOf(row.price)]));
+  return priceCatalog().map((item) => ({ code: item.code, price: saved.get(item.code) ?? 0 }));
+}
+
+export async function saveProcedurePrices(prices: ProcedurePrice[]) {
+  const db = await getDb();
+  for (const item of priceCatalog()) {
+    const incoming = prices.find((price) => price.code === item.code);
+    const price = Math.max(0, amountOf(incoming?.price));
+    await db.prepare(`INSERT INTO procedure_prices (code, price) VALUES (?, ?) ON CONFLICT(code) DO UPDATE SET price = excluded.price`).run(item.code, price);
+  }
+  changed();
+}
+
+export async function listDailyVisits(scope?: PatientScope): Promise<DailyVisitRow[]> {
+  const date = todayISO();
+  const scoped = scopeSql("p", scope);
+  const rows = many(
+    await (await getDb())
+      .prepare(
+        `SELECT d.id, d.created_at, p.id AS patient_id, p.name, p.file_number,
+                v.patient_type, v.payment_method, v.procedure_code, v.procedures, v.visit_jaw,
+                v.broken_brackets, v.break_reason, v.due_amount, v.paid_amount
+         FROM daily_attendance d
+         JOIN patients p ON p.id = d.patient_id
+         LEFT JOIN visits v ON v.id = (
+           SELECT vv.id FROM visits vv
+           WHERE vv.patient_id = p.id AND vv.visit_date = d.attend_date AND vv.auto = 0
+           ORDER BY vv.created_at DESC
+           LIMIT 1
+         )
+         WHERE d.attend_date = ?${scoped.sql}
+         ORDER BY d.created_at ASC`,
+      )
+      .all(date, ...scoped.params),
+  );
+  return rows.map((row) => ({
+    id: str(row, "id"),
+    patientId: str(row, "patient_id"),
+    patientName: str(row, "name"),
+    fileNumber: str(row, "file_number"),
+    recordedAt: str(row, "created_at"),
+    patientType: str(row, "patient_type"),
+    paymentMethod: str(row, "payment_method"),
+    procedureCode: str(row, "procedure_code"),
+    procedureText: str(row, "procedures"),
+    jaw: str(row, "visit_jaw"),
+    brokenBrackets: amountOf(row.broken_brackets),
+    breakReason: str(row, "break_reason"),
+    due: amountOf(row.due_amount),
+    paid: amountOf(row.paid_amount),
+  }));
+}
+
 async function clearPatientFollowups(patientId: string) {
   await (await getDb())
     .prepare(`UPDATE followups SET read_at = ? WHERE patient_id = ? AND read_at IS NULL`)
@@ -1645,6 +1874,258 @@ async function resolveDoctorId(patient: Patient) {
   const match = (await listDoctors()).find((doctor) => doctor.name.trim() === patient.doctor.trim());
   if (!match) throw new ClinicError("لا يوجد حساب طبيبة مرتبط بهذا الملف لإرسال الإشعار");
   return match.id;
+}
+
+export async function listReconciliation(date = todayISO()) {
+  const attendance = many(
+    await (await getDb())
+      .prepare(
+        `SELECT d.patient_id, p.name, p.file_number, p.doctor,
+                EXISTS(
+                  SELECT 1 FROM visits v
+                  WHERE v.patient_id = d.patient_id AND v.visit_date = d.attend_date AND v.auto = 0
+                ) AS logged
+         FROM daily_attendance d
+         JOIN patients p ON p.id = d.patient_id
+         WHERE d.attend_date = ?
+         ORDER BY p.name`,
+      )
+      .all(date),
+  );
+  const visits = many(
+    await (await getDb())
+      .prepare(
+        `SELECT v.id, v.patient_id, v.procedures, v.due_amount, v.paid_amount, v.carried_in, p.name, p.file_number, p.doctor
+         FROM visits v
+         JOIN patients p ON p.id = v.patient_id
+         WHERE v.auto = 0 AND v.visit_date = ?
+         ORDER BY v.created_at ASC`,
+      )
+      .all(date),
+  );
+  const missing: ReconciliationGap[] = attendance.filter((row) => !flag(row.logged)).map((row) => ({
+    patientId: str(row, "patient_id"),
+    patientName: str(row, "name"),
+    fileNumber: str(row, "file_number"),
+    doctor: str(row, "doctor"),
+  }));
+  const recorded: ReconciliationVisit[] = visits.map((row) => ({
+    id: str(row, "id"),
+    patientId: str(row, "patient_id"),
+    patientName: str(row, "name"),
+    fileNumber: str(row, "file_number"),
+    doctor: str(row, "doctor"),
+    procedureText: str(row, "procedures"),
+    due: money(amountOf(row.due_amount)),
+    paid: money(amountOf(row.paid_amount)),
+    carried: money(amountOf(row.carried_in)),
+  }));
+  return {
+    attendance: attendance.length,
+    recordedPatients: attendance.length - missing.length,
+    missing,
+    visits: recorded,
+  };
+}
+
+function buildAdminAlerts(report: Pick<AdminDayReport, "attendance" | "recordedPatients" | "gap" | "missing" | "lines">) {
+  const alerts: string[] = [];
+  if (report.gap !== 0) {
+    const names = report.missing.map((item) => `${item.patientName} (${item.fileNumber})`).join(" · ");
+    alerts.push(`اختلاف بين الحضور (${report.attendance}) والمسجّلين في سجل الزيارات (${report.recordedPatients})${names ? `: ${names}` : ""}.`);
+  }
+  for (const line of report.lines) {
+    if (line.due === 0 && line.paid === 0) {
+      alerts.push(`زيارة ${line.patientName} دون مبلغ مسجّل${line.procedureText ? ` (${line.procedureText})` : ""}.`);
+      continue;
+    }
+    if (line.difference > 0) {
+      alerts.push(`لم يُحصَّل مبلغ إجراء ${line.procedureText || "الزيارة"} للحالة ${line.patientName}. المتبقي ${line.difference}.`);
+    }
+  }
+  return alerts;
+}
+
+async function buildAdminDayReport(date: string): Promise<AdminDayReport> {
+  const reconciliation = await listReconciliation(date);
+  const rows = many(
+    await (await getDb())
+      .prepare(
+        `SELECT v.id, v.patient_id, v.procedures, v.visit_jaw, v.broken_brackets, v.break_reason,
+                v.due_amount, v.paid_amount, v.notes, p.name
+         FROM visits v
+         JOIN patients p ON p.id = v.patient_id
+         WHERE v.auto = 0 AND v.visit_date = ?
+         ORDER BY v.created_at ASC`,
+      )
+      .all(date),
+  );
+  const lines = rows.map((row) => {
+    const due = money(amountOf(row.due_amount));
+    const paid = money(amountOf(row.paid_amount));
+    return {
+      id: str(row, "id"),
+      patientId: str(row, "patient_id"),
+      patientName: str(row, "name"),
+      procedureText: str(row, "procedures"),
+      jaw: str(row, "visit_jaw"),
+      brokenBrackets: amountOf(row.broken_brackets),
+      breakReason: str(row, "break_reason"),
+      due,
+      paid,
+      difference: money(Math.max(0, due - paid)),
+      notes: str(row, "notes"),
+    };
+  });
+  const due = money(lines.reduce((sum, line) => sum + line.due, 0));
+  const paid = money(lines.reduce((sum, line) => sum + line.paid, 0));
+  const draft = {
+    date,
+    attendance: reconciliation.attendance,
+    recordedPatients: reconciliation.recordedPatients,
+    gap: reconciliation.attendance - reconciliation.recordedPatients,
+    due,
+    paid,
+    remaining: money(Math.max(0, due - paid)),
+    unpriced: lines.filter((line) => line.due === 0 && line.paid === 0).length,
+    missing: reconciliation.missing.map((item) => ({ patientName: item.patientName, fileNumber: item.fileNumber })),
+    alerts: [] as string[],
+    lines,
+    closed: false,
+    closedAt: "",
+  };
+  draft.alerts = buildAdminAlerts(draft);
+  return draft;
+}
+
+export async function getAdminDayReport(date = todayISO()): Promise<AdminDayReport> {
+  const saved = one(await (await getDb()).prepare(`SELECT payload, closed_at FROM daily_closures WHERE report_date = ?`).get(date));
+  if (!saved) return await buildAdminDayReport(date);
+  const report = parseJson<AdminDayReport | null>(saved.payload, null);
+  if (!report) return await buildAdminDayReport(date);
+  return { ...report, closed: true, closedAt: str(saved, "closed_at") };
+}
+
+export async function closeAdminDay(actorId: string, date = todayISO()) {
+  const existing = one(await (await getDb()).prepare(`SELECT id FROM daily_closures WHERE report_date = ?`).get(date));
+  if (existing) throw new ClinicError("تم إقفال هذا اليوم ولا يمكن تعديله");
+  const report = await buildAdminDayReport(date);
+  const closedAt = new Date().toISOString();
+  const payload = JSON.stringify({ ...report, closed: true, closedAt });
+  await (await getDb())
+    .prepare(`INSERT INTO daily_closures (id, report_date, payload, closed_by, closed_at) VALUES (?, ?, ?, ?, ?)`)
+    .run(randomUUID(), date, payload, actorId, closedAt);
+  changed();
+  return await getAdminDayReport(date);
+}
+
+export async function listClosedDays() {
+  const rows = many(
+    await (await getDb())
+      .prepare(`SELECT report_date, closed_at, payload FROM daily_closures ORDER BY report_date DESC`)
+      .all(),
+  );
+  return rows.map((row) => {
+    const report = parseJson<AdminDayReport | null>(row.payload, null);
+    return {
+      date: str(row, "report_date"),
+      closedAt: str(row, "closed_at"),
+      gap: report?.gap ?? 0,
+      remaining: report?.remaining ?? 0,
+      visits: report?.lines.length ?? 0,
+    };
+  });
+}
+
+export async function listDebts(): Promise<DebtCase[]> {
+  const rows = many(
+    await (await getDb())
+      .prepare(
+        `SELECT v.patient_id, v.visit_date, v.created_at, v.procedures, v.procedure_due, v.paid_amount,
+                p.name, p.file_number, p.phone, p.doctor
+         FROM visits v
+         JOIN patients p ON p.id = v.patient_id
+         WHERE v.auto = 0
+         ORDER BY v.patient_id, v.visit_date ASC, v.created_at ASC`,
+      )
+      .all(),
+  );
+  const grouped = new Map<string, Row[]>();
+  for (const row of rows) {
+    const id = str(row, "patient_id");
+    const list = grouped.get(id) ?? [];
+    list.push(row);
+    grouped.set(id, list);
+  }
+  const debts: DebtCase[] = [];
+  for (const list of grouped.values()) {
+    let carry = 0;
+    let last: { row: Row; due: number; paid: number } | null = null;
+    for (const row of list) {
+      const due = money(amountOf(row.procedure_due) + carry);
+      const paid = money(amountOf(row.paid_amount));
+      last = { row, due, paid };
+      carry = money(Math.max(0, due - paid));
+    }
+    if (!last) continue;
+    const remaining = money(Math.max(0, last.due - last.paid));
+    if (remaining <= 0) continue;
+    debts.push({
+      patientId: str(last.row, "patient_id"),
+      patientName: str(last.row, "name"),
+      fileNumber: str(last.row, "file_number"),
+      phone: str(last.row, "phone"),
+      doctor: str(last.row, "doctor"),
+      procedureText: str(last.row, "procedures"),
+      visitDate: str(last.row, "visit_date"),
+      due: last.due,
+      paid: last.paid,
+      remaining,
+    });
+  }
+  debts.sort((a, b) => a.patientName.localeCompare(b.patientName, "ar"));
+  return debts;
+}
+
+export async function remindUnloggedVisits(actorId: string) {
+  const { missing } = await listReconciliation();
+  if (missing.length === 0) throw new ClinicError("عدد الحضور مطابق لسجل الزيارات");
+  let sent = 0;
+  for (const item of missing) {
+    const patient = await getPatient(item.patientId);
+    if (!patient) continue;
+    let doctorId = "";
+    try {
+      doctorId = await resolveDoctorId(patient);
+    } catch {
+      throw new ClinicError(`لا يوجد حساب طبيبة لـ ${patient.name} لإرسال التذكير`);
+    }
+    const existing = one(
+      await (await getDb())
+        .prepare(
+          `SELECT id FROM followups
+           WHERE patient_id = ? AND doctor_id = ? AND read_at IS NULL AND message LIKE 'تذكير المطابقة:%'`,
+        )
+        .get(patient.id, doctorId),
+    );
+    if (existing) continue;
+    await (await getDb())
+      .prepare(
+        `INSERT INTO followups (id, patient_id, doctor_id, message, created_by, created_at, read_at)
+         VALUES (?, ?, ?, ?, ?, ?, NULL)`,
+      )
+      .run(
+        randomUUID(),
+        patient.id,
+        doctorId,
+        "تذكير المطابقة: حضر اليوم ولم يُسجَّل له سجل زيارة. لا يُقفل اليوم قبل التسجيل.",
+        actorId,
+        new Date().toISOString(),
+      );
+    sent += 1;
+  }
+  changed();
+  return sent;
 }
 
 export async function createFollowup(patientId: string, actorId: string) {

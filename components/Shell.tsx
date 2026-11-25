@@ -11,6 +11,10 @@ import {
   FileOutput,
   LogOut,
   Menu,
+  NotebookText,
+  Scale,
+  Tags,
+  Wallet,
   UserCog,
   Users,
   X,
@@ -79,6 +83,30 @@ export function Shell({
       badge: counts.upcoming,
     },
     {
+      href: "/daily",
+      label: "التقارير اليومية",
+      icon: NotebookText,
+      show: can(user.role, "dailyReport"),
+      match: (path: string) => path.startsWith("/daily"),
+      badge: 0,
+    },
+    {
+      href: "/reconcile",
+      label: "المطابقة اليومية",
+      icon: Scale,
+      show: can(user.role, "reconcile"),
+      match: (path: string) => path.startsWith("/reconcile"),
+      badge: 0,
+    },
+    {
+      href: "/debts",
+      label: "المديونيات",
+      icon: Wallet,
+      show: can(user.role, "debts"),
+      match: (path: string) => path.startsWith("/debts"),
+      badge: 0,
+    },
+    {
       href: "/discharge",
       label: "تقرير المخالصة",
       icon: FileOutput,
@@ -102,6 +130,14 @@ export function Shell({
       match: (path: string) => path.startsWith("/users"),
       badge: 0,
     },
+    {
+      href: "/prices",
+      label: "الأسعار",
+      icon: Tags,
+      show: can(user.role, "prices"),
+      match: (path: string) => path.startsWith("/prices"),
+      badge: 0,
+    },
   ].filter((item) => item.show);
   const navHrefs = items.map((item) => item.href).join("\n");
 
@@ -112,7 +148,11 @@ export function Shell({
     if (user.role === "doctor" || user.role === "admin") {
       targets.add("/patients?filter=new");
       targets.add("/patients?filter=pending");
+      targets.add("/daily");
     }
+    if (can(user.role, "prices")) targets.add("/prices");
+    if (can(user.role, "reconcile")) targets.add("/reconcile");
+    if (can(user.role, "debts")) targets.add("/debts");
     const timer = window.setTimeout(() => {
       for (const href of targets) {
         if (href === pathname) continue;
