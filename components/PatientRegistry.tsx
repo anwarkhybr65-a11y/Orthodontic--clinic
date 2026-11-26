@@ -45,6 +45,7 @@ export function PatientRegistry({
   }
   const [query, setQuery] = useState("");
   const [chip, setChip] = useState<Chip>(hideChips ? "all" : initialChip);
+  const shownChip = hideChips ? "all" : chip;
   const searching = query.trim().length > 0;
   const present = new Set(attendedToday);
   const visibleChips = chips;
@@ -54,11 +55,11 @@ export function PatientRegistry({
       const matchesChip =
         variant !== "registry" ||
         searching ||
-        chip === "all" ||
-        (chip === "pending" ? !patient.planReady && patient.status !== "discharged" : patient.status === chip);
+        shownChip === "all" ||
+        (shownChip === "pending" ? !patient.planReady && patient.status !== "discharged" : patient.status === shownChip);
       return matchesChip && matchesPatientQuery(patient.name, patient.fileNumber, patient.phone, query);
     });
-  }, [patients, query, chip, searching, variant]);
+  }, [patients, query, shownChip, searching, variant]);
 
   return (
     <div className="space-y-4">

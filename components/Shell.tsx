@@ -20,16 +20,19 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { AlertWatcher } from "@/components/AlertWatcher";
 import { can, ROLE_LABELS, type Role } from "@/lib/permissions";
 
 export function Shell({
   facilityName,
   counts,
+  newCases = 0,
   user,
   children,
 }: {
   facilityName: string;
   counts: { current: number; pending: number; upcoming: number; today: number; attendance: number; followups: number };
+  newCases?: number;
   user: { name: string; role: Role };
   children: React.ReactNode;
 }) {
@@ -164,6 +167,7 @@ export function Shell({
 
   return (
     <div className="flex min-h-screen">
+      {user.role === "doctor" || user.role === "admin" ? <AlertWatcher newCases={newCases} followups={counts.followups} /> : null}
       {open ? (
         <button
           type="button"

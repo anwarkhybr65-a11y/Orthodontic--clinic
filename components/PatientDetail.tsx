@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CalendarPlus, FileOutput, Hash, Phone, Stethoscope, Trash2, UserRound } from "lucide-react";
 import { BackLink } from "@/components/BackLink";
 import { ClinicalGallery } from "@/components/ClinicalGallery";
@@ -83,6 +83,11 @@ export function PatientDetail({
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if ((role !== "doctor" && role !== "admin") || !patient.intakeNew) return;
+    void mutate(`/api/patients/${patient.id}/opened`, "POST").catch(() => undefined);
+  }, [patient.id, patient.intakeNew, role]);
 
   async function save(patch: Record<string, unknown>, success: string) {
     setBusy(true);

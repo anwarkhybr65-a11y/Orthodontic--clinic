@@ -567,6 +567,7 @@ function mapPatient(row: Row): Patient {
     doctorId: str(row, "doctor_id"),
     createdBy: str(row, "created_by"),
     planReady: flag(row.plan_ready),
+    intakeNew: flag(row.intake_new),
     chiefComplaint: str(row, "chief_complaint"),
     clinicalDiagnosis: str(row, "clinical_diagnosis"),
     records: normalizeRecords(parseJson(row.records_json, emptyRecords())),

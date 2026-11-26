@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Shell } from "@/components/Shell";
 import { getCurrentUser } from "@/lib/auth";
-import { getFacilityName, getNavCounts } from "@/lib/cached";
+import { getFacilityName, getNavCounts, countNewIntakes } from "@/lib/cached";
 import { scopeFor } from "@/lib/permissions";
 import "./globals.css";
 
@@ -44,15 +44,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   const user = await getCurrentUser();
   if (!user) redirect("/api/auth/logout");
-  const [facilityName, counts] = await Promise.all([
+  const seesNewCases = user.role === "doctor" || user.role === "admin";
+  const [facilityName, counts, newCases] = await Promise.all([
     getFacilityName(),
     getNavCounts(scopeFor(user), user.role === "doctor" ? user.id : undefined),
+    seesNewCases ? countNewIntakes(scopeFor(user)) : Promise.resolve(0),
   ]);
 
   return (
     <html lang="ar" dir="rtl">
       <body className={`${cairo.className} antialiased`}>
-        <Shell facilityName={facilityName} counts={counts} user={user}>
+        <Shell facilityName={facilityName} counts={counts} newCases={newCases} user={user}>
           {children}
         </Shell>
       </body>

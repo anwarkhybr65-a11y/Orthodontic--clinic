@@ -98,6 +98,7 @@ export type Patient = {
   doctorId: string;
   createdBy: string;
   planReady: boolean;
+  intakeNew: boolean;
   chiefComplaint: string;
   clinicalDiagnosis: string;
   records: RecordsMap;

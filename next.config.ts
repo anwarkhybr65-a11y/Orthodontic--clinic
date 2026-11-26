@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@libsql/client"],
   experimental: {
     staleTimes: {
-      dynamic: 60,
+      dynamic: 0,
       static: 60,
     },
   },

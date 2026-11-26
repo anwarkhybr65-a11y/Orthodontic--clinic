@@ -50,6 +50,7 @@ export default async function PatientsPage({
         <p className="rounded-2xl bg-sage-50 px-4 py-3 text-sm font-bold text-sage-800">تم إرسال الملف إلى الطبيبة.</p>
       ) : null}
       <PatientRegistry
+        key={isNew ? "new" : initialChip}
         patients={patients}
         showAttendance
         attendedToday={attendedToday}

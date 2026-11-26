@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { after } from "next/server";
 import { BackLink } from "@/components/BackLink";
 import { FollowupSender } from "@/components/FollowupSender";
 import { PatientDetail } from "@/components/PatientDetail";
 import { PlanDocument } from "@/components/PlanDocument";
 import { getPatient, listDoctors, listProcedurePrices } from "@/lib/cached";
-import { clearIntakeAlert } from "@/lib/db";
 import { assertPatient, requireUser } from "@/lib/guard";
 import { can } from "@/lib/permissions";
 import { ClinicError } from "@/lib/errors";
@@ -29,10 +27,6 @@ export default async function PatientPage({ params }: { params: Promise<{ id: st
       if (error instanceof ClinicError) notFound();
       throw error;
     }
-  }
-  if (user.role === "doctor" || user.role === "admin") {
-    const patientId = patient.id;
-    after(() => clearIntakeAlert(patientId));
   }
   if (user.role === "customer_service") {
     return (
